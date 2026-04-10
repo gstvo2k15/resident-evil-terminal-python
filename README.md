@@ -51,4 +51,8 @@ deactivate
 
     pip install -r requirements.txt
 
+<<<<<<< HEAD
     python terminal.py
+=======
+    python main.py
+>>>>>>> 0bffc2fd24da7b6860dd63d885bbba7d2e21038a
