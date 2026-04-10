@@ -64,6 +64,7 @@ snd_waiting = load_sound(SND_WAITING)
 snd_main = load_sound(SND_MAIN)
 
 wait_channel = pygame.mixer.Channel(1)
+type_channel = pygame.mixer.Channel(2)
 
 font_title = pygame.font.SysFont("couriernew", 28, bold=True)
 font_term = pygame.font.SysFont("couriernew", 30, bold=True)
@@ -76,6 +77,12 @@ font_choice = pygame.font.SysFont("couriernew", 34, bold=True)
 def play_sound(sound, loops=0):
     if sound:
         sound.play(loops=loops)
+
+def play_type_sound():
+    if snd_main:
+        # Evita cortar el sample demasiado agresivamente
+        if not type_channel.get_busy():
+            type_channel.play(snd_main)
 
 def draw_shadow_text(surface, font, text, color, shadow_color, pos):
     x, y = pos
@@ -199,13 +206,14 @@ OPTIONS = ["Yes", "No"]
 class App:
     def __init__(self):
         self.running = True
-        self.state = "grow"
+        self.state = "idle_bg"
         self.state_timer = 0.0
 
         self.target_rect = pygame.Rect(26, 30, 820, 390)
         self.grow_origin = (96, 110)
         self.grow_start_size = (120, 64)
         self.grow_duration = 0.55
+        self.idle_bg_duration = 0.65
 
         self.visible_lines = []
         self.line_index = 0
@@ -228,8 +236,7 @@ class App:
         self.subtitle_accum = 0.0
 
         self.base_lines = INFO_LINES[:]
-        self.replace_start_index = 4  # line "The doors can be unlocked"
-        self.replace_count = 3        # replace lines 4, 5, 6
+        self.replace_start_index = 4
 
     def current_window_rect(self):
         if self.state != "grow":
@@ -257,7 +264,6 @@ class App:
 
         if new_state == "typing":
             self.reset_typing()
-            play_sound(snd_main)
 
         elif new_state == "question":
             play_sound(snd_main)
@@ -296,9 +302,15 @@ class App:
             if self.char_index < len(base_text):
                 self.visible_lines[-1] += base_text[self.char_index]
                 self.char_index += 1
+
+                # Sonido recurrente de tecleo
+                if self.char_index % 2 == 1 and base_text[self.char_index - 1] != " ":
+                    play_type_sound()
+
             else:
                 if len(line) == 4:
                     self.visible_lines[-1] = line
+                    play_type_sound()
                 else:
                     self.visible_lines[-1] = (self.visible_lines[-1], line[1])
 
@@ -311,10 +323,18 @@ class App:
         self.question_accum += dt
         while self.question_accum >= self.question_speed:
             self.question_accum -= self.question_speed
+
             if self.question_char_index_1 < len(QUESTION_1):
+                ch = QUESTION_1[self.question_char_index_1]
                 self.question_char_index_1 += 1
+                if ch != " ":
+                    play_type_sound()
+
             elif self.question_char_index_2 < len(QUESTION_2):
+                ch = QUESTION_2[self.question_char_index_2]
                 self.question_char_index_2 += 1
+                if ch != " ":
+                    play_type_sound()
 
     def build_lines_for_current_state(self):
         lines = self.base_lines[:]
@@ -336,7 +356,11 @@ class App:
         self.state_timer += dt
         self.update_subtitle(dt)
 
-        if self.state == "grow":
+        if self.state == "idle_bg":
+            if self.state_timer >= self.idle_bg_duration:
+                self.set_state("grow")
+
+        elif self.state == "grow":
             if self.state_timer >= self.grow_duration:
                 self.set_state("typing")
 
@@ -487,16 +511,18 @@ class App:
     def render(self):
         self.draw_background()
 
-        rect = self.current_window_rect()
-        inner_rect = draw_window(screen, rect, "PROGRAM(011)")
+        # Fondo vacío inicial sin consola
+        if self.state != "idle_bg":
+            rect = self.current_window_rect()
+            inner_rect = draw_window(screen, rect, "PROGRAM(011)")
 
-        if rect.w > 300 and rect.h > 140:
-            self.draw_lines(inner_rect)
+            if rect.w > 300 and rect.h > 140 and self.state != "grow":
+                self.draw_lines(inner_rect)
 
-        if self.state == "question":
-            self.draw_question()
-        elif self.state in ("checking", "done"):
-            self.draw_bottom_status()
+            if self.state == "question":
+                self.draw_question()
+            elif self.state in ("checking", "done"):
+                self.draw_bottom_status()
 
         self.draw_subtitle()
         draw_scanlines(screen, alpha=18, step=2)
