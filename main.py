@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 
@@ -13,138 +12,188 @@ SCREEN_W = 800
 SCREEN_H = 600
 FPS = 60
 
-# Imágenes exactas que has subido
 IMG_BG = BASE_DIR / "skycard_0.png"
 IMG_1 = BASE_DIR / "skycard_1.png"
 IMG_2 = BASE_DIR / "skycard_2.png"
-IMG_3 = BASE_DIR / "skycard_3.png"
-IMG_4 = BASE_DIR / "skycard_4.png"
 
-# Sonidos exactos que has subido
 SND_ACCEPT = BASE_DIR / "accept.mp3"
 SND_WAITING = BASE_DIR / "beep_waitting.mp3"
 SND_MAIN = BASE_DIR / "beep_main.mp3"
 
-# Texto interactivo
-PROMPT_TEXT_1 = "Will you use the"
-PROMPT_TEXT_2 = "Blue Card Key?"
-OPTIONS = ["Yes", "No"]
+WHITE = (235, 235, 235)
+GREEN = (0, 200, 40)
+DARK_GREEN = (20, 60, 20)
+SHADOW = (60, 60, 60)
+BLACK = (0, 0, 0)
 
-# Posiciones aproximadas basadas en tu captura
-OPT_ARROW_POS = {
-    "Yes": (500, 538),
-    "No": (640, 538),
-}
+# Rectángulo aproximado de la gran ventana "PROGRAM(011)"
+# Ajustado a tus capturas 800x600
+PROGRAM_RECT = pygame.Rect(34, 18, 633, 284)
 
 # =========================================================
 # HELPERS
 # =========================================================
-def safe_load_image(path: Path) -> pygame.Surface:
+def load_image(path: Path) -> pygame.Surface:
     if not path.exists():
-        raise FileNotFoundError(f"No existe la imagen: {path}")
-    img = pygame.image.load(str(path)).convert()
-    return pygame.transform.smoothscale(img, (SCREEN_W, SCREEN_H))
+        raise FileNotFoundError(f"Falta imagen: {path}")
+    return pygame.transform.smoothscale(
+        pygame.image.load(str(path)).convert(),
+        (SCREEN_W, SCREEN_H)
+    )
 
-def safe_load_sound(path: Path):
+def load_sound(path: Path):
     if not path.exists():
-        print(f"[WARN] No existe el sonido: {path}")
         return None
     try:
         return pygame.mixer.Sound(str(path))
-    except pygame.error as e:
-        print(f"[WARN] No se pudo cargar sonido {path.name}: {e}")
+    except pygame.error:
         return None
 
-def play_sound(sound, loops=0):
-    if sound is not None:
-        sound.play(loops=loops)
+def blit_text_shadow(surface, font, text, color, shadow_color, x, y):
+    s = font.render(text, True, shadow_color)
+    t = font.render(text, True, color)
+    surface.blit(s, (x + 2, y + 2))
+    surface.blit(t, (x, y))
 
-def stop_sound(sound):
-    if sound is not None:
-        sound.stop()
+def crop_program_window(full_img: pygame.Surface) -> pygame.Surface:
+    cropped = pygame.Surface((PROGRAM_RECT.width, PROGRAM_RECT.height)).convert()
+    cropped.blit(full_img, (0, 0), PROGRAM_RECT)
+    return cropped
 
-def draw_shadow_text(surface, font, text, color, shadow_color, pos):
-    x, y = pos
-    shadow = font.render(text, True, shadow_color)
-    main = font.render(text, True, color)
-    surface.blit(shadow, (x + 2, y + 2))
-    surface.blit(main, (x, y))
-
-def draw_choice_arrow(surface, pos):
-    x, y = pos
-    # Flecha blanca simple estilo PS1
-    pts = [(x, y), (x + 14, y + 8), (x, y + 16)]
-    pygame.draw.polygon(surface, (230, 230, 230), pts)
-    pygame.draw.polygon(surface, (80, 80, 80), pts, 1)
+def draw_arrow(surface, x, y):
+    pts = [(x, y), (x + 12, y + 8), (x, y + 16)]
+    pygame.draw.polygon(surface, WHITE, pts)
+    pygame.draw.polygon(surface, SHADOW, pts, 1)
 
 # =========================================================
-# APP
+# SCENE
 # =========================================================
-class DoorLockScene:
-    def __init__(self, screen: pygame.Surface):
+class RetroDoorLock:
+    def __init__(self, screen):
         self.screen = screen
         self.clock = pygame.time.Clock()
         self.running = True
 
-        # Estados
-        self.state = "boot_bg"
-        self.state_timer = 0.0
-
-        # Selección
-        self.selected_index = 0
-
         # Recursos
-        self.bg = safe_load_image(IMG_BG)
-        self.frame_1 = safe_load_image(IMG_1)
-        self.frame_2 = safe_load_image(IMG_2)
-        self.frame_3 = safe_load_image(IMG_3)
-        self.frame_4 = safe_load_image(IMG_4)
+        self.bg = load_image(IMG_BG)
+        img1 = load_image(IMG_1)
+        img2 = load_image(IMG_2)
 
-        self.snd_accept = safe_load_sound(SND_ACCEPT)
-        self.snd_waiting = safe_load_sound(SND_WAITING)
-        self.snd_main = safe_load_sound(SND_MAIN)
+        # Extraemos solo la gran ventana de las capturas 1 y 2
+        self.program_empty = crop_program_window(img1)
+        self.program_info = crop_program_window(img2)
 
-        # Canal dedicado para el sonido de espera
+        self.snd_accept = load_sound(SND_ACCEPT)
+        self.snd_waiting = load_sound(SND_WAITING)
+        self.snd_main = load_sound(SND_MAIN)
+
         self.wait_channel = pygame.mixer.Channel(1)
 
-        # Fuente aproximada para el overlay de opciones
-        self.font_big = pygame.font.SysFont("couriernew", 40, bold=True)
-        self.font_med = pygame.font.SysFont("couriernew", 34, bold=True)
+        # Fuentes
+        self.font_terminal = pygame.font.SysFont("couriernew", 34, bold=True)
+        self.font_prompt = pygame.font.SysFont("couriernew", 30, bold=True)
+        self.font_choice = pygame.font.SysFont("couriernew", 38, bold=True)
 
-    def set_state(self, new_state: str):
-        self.state = new_state
-        self.state_timer = 0.0
+        # Estados
+        self.state = "boot"
+        self.timer = 0.0
 
-        if new_state == "menu_empty":
-            play_sound(self.snd_main)
+        # Typing
+        self.text_lines = []
+        self.current_line_index = 0
+        self.current_char_index = 0
+        self.typing_speed = 0.035
+        self.typing_accum = 0.0
+        self.visible_lines = []
 
-        elif new_state == "menu_info":
-            play_sound(self.snd_main)
+        # Selección
+        self.selected = 0
+        self.options = ["Yes", "No"]
 
-        elif new_state == "question":
-            play_sound(self.snd_main)
+        self.prepare_info_text()
 
-        elif new_state == "checking":
-            if self.snd_waiting is not None:
+    def prepare_info_text(self):
+        self.text_lines = [
+            "DOOR LOCK SERVICE",
+            "----------------------------",
+            "Hall side doors:      LOCKED",
+            "",
+            "The doors can be unlocked",
+            "by a CARD KEY.",
+            "",
+            "-"
+        ]
+        self.current_line_index = 0
+        self.current_char_index = 0
+        self.visible_lines = [""]  # línea actual
+        self.typing_accum = 0.0
+
+    def reset_typing(self):
+        self.prepare_info_text()
+
+    def play(self, snd, loops=0):
+        if snd:
+            snd.play(loops=loops)
+
+    def set_state(self, state):
+        self.state = state
+        self.timer = 0.0
+
+        if state == "window_empty":
+            self.play(self.snd_main)
+
+        elif state == "typing_info":
+            self.play(self.snd_main)
+            self.reset_typing()
+
+        elif state == "question":
+            self.play(self.snd_main)
+
+        elif state == "checking":
+            if self.snd_waiting:
                 self.wait_channel.play(self.snd_waiting, loops=-1)
 
-        elif new_state == "done":
+        elif state == "done":
             self.wait_channel.stop()
-            play_sound(self.snd_accept)
+            self.play(self.snd_accept)
 
-    def update(self, dt: float):
-        self.state_timer += dt
+    def update_typing(self, dt):
+        if self.current_line_index >= len(self.text_lines):
+            return
 
-        if self.state == "boot_bg":
-            if self.state_timer >= 0.9:
-                self.set_state("menu_empty")
+        self.typing_accum += dt
+        while self.typing_accum >= self.typing_speed:
+            self.typing_accum -= self.typing_speed
 
-        elif self.state == "menu_empty":
-            if self.state_timer >= 1.1:
-                self.set_state("menu_info")
+            full_line = self.text_lines[self.current_line_index]
+
+            if self.current_char_index < len(full_line):
+                current = self.visible_lines[-1]
+                current += full_line[self.current_char_index]
+                self.visible_lines[-1] = current
+                self.current_char_index += 1
+            else:
+                self.current_line_index += 1
+                self.current_char_index = 0
+                if self.current_line_index < len(self.text_lines):
+                    self.visible_lines.append("")
+
+    def update(self, dt):
+        self.timer += dt
+
+        if self.state == "boot":
+            if self.timer >= 0.7:
+                self.set_state("window_empty")
+
+        elif self.state == "window_empty":
+            if self.timer >= 0.9:
+                self.set_state("typing_info")
+
+        elif self.state == "typing_info":
+            self.update_typing(dt)
 
         elif self.state == "checking":
-            if self.state_timer >= 2.2:
+            if self.timer >= 2.0:
                 self.set_state("done")
 
     def handle_event(self, event):
@@ -157,110 +206,143 @@ class DoorLockScene:
                 self.running = False
                 return
 
-            if self.state == "question":
+            if self.state == "typing_info":
+                if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    if self.current_line_index < len(self.text_lines):
+                        self.visible_lines = self.text_lines[:]
+                        self.current_line_index = len(self.text_lines)
+                        self.current_char_index = 0
+                    else:
+                        self.set_state("question")
+
+            elif self.state == "question":
                 if event.key in (pygame.K_LEFT, pygame.K_a):
-                    self.selected_index = max(0, self.selected_index - 1)
-                    play_sound(self.snd_main)
+                    self.selected = max(0, self.selected - 1)
+                    self.play(self.snd_main)
 
                 elif event.key in (pygame.K_RIGHT, pygame.K_d):
-                    self.selected_index = min(len(OPTIONS) - 1, self.selected_index + 1)
-                    play_sound(self.snd_main)
+                    self.selected = min(1, self.selected + 1)
+                    self.play(self.snd_main)
 
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                    selected = OPTIONS[self.selected_index]
-                    if selected == "Yes":
+                    if self.options[self.selected] == "Yes":
                         self.set_state("checking")
                     else:
-                        # Si elige No, vuelve a la pregunta sin hacer nada más
-                        play_sound(self.snd_main)
-
-            elif self.state == "menu_info":
-                if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                    self.set_state("question")
+                        self.play(self.snd_main)
 
             elif self.state == "done":
                 if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     self.running = False
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.state == "menu_info":
-                self.set_state("question")
+            if self.state == "typing_info":
+                if self.current_line_index < len(self.text_lines):
+                    self.visible_lines = self.text_lines[:]
+                    self.current_line_index = len(self.text_lines)
+                    self.current_char_index = 0
+                else:
+                    self.set_state("question")
+
+            elif self.state == "question":
+                self.set_state("checking")
+
             elif self.state == "done":
                 self.running = False
 
+    def draw_program_empty(self):
+        self.screen.blit(self.program_empty, PROGRAM_RECT.topleft)
+
+    def draw_program_info_window(self):
+        # Base del escritorio
+        self.screen.blit(self.bg, (0, 0))
+
+        # Ventana vacía como base
+        self.draw_program_empty()
+
+        # Fondo interno oscuro semitransparente dentro de la ventana
+        inner = pygame.Surface((PROGRAM_RECT.width - 12, PROGRAM_RECT.height - 28), pygame.SRCALPHA)
+        inner.fill((0, 20, 20, 135))
+        self.screen.blit(inner, (PROGRAM_RECT.x + 6, PROGRAM_RECT.y + 22))
+
+        # Título superior ya forma parte del recorte, pero dibujamos el contenido textual
+        x = PROGRAM_RECT.x + 10
+        y = PROGRAM_RECT.y + 26
+
+        for i, line in enumerate(self.visible_lines):
+            if i == 2 and "LOCKED" in line:
+                # Partimos la línea para colorear LOCKED en verde
+                left = "Hall side doors:      "
+                right = "LOCKED"
+                blit_text_shadow(self.screen, self.font_terminal, left, WHITE, SHADOW, x, y)
+                blit_text_shadow(self.screen, self.font_terminal, right, GREEN, DARK_GREEN, x + 420, y)
+            elif i == 5 and "CARD KEY" in line:
+                left = "by a "
+                right = "CARD KEY."
+                blit_text_shadow(self.screen, self.font_terminal, left, WHITE, SHADOW, x, y)
+                blit_text_shadow(self.screen, self.font_terminal, right, GREEN, DARK_GREEN, x + 106, y)
+            else:
+                blit_text_shadow(self.screen, self.font_terminal, line, WHITE, SHADOW, x, y)
+
+            y += 40
+
+    def draw_question_overlay(self):
+        blit_text_shadow(self.screen, self.font_prompt, "Will you use the", WHITE, SHADOW, 90, 500)
+        blit_text_shadow(self.screen, self.font_prompt, "Blue Card Key?", GREEN, DARK_GREEN, 90, 540)
+
+        blit_text_shadow(self.screen, self.font_choice, "Yes", WHITE, SHADOW, 520, 525)
+        blit_text_shadow(self.screen, self.font_choice, "No", WHITE, SHADOW, 650, 525)
+
+        if self.selected == 0:
+            draw_arrow(self.screen, 490, 536)
+        else:
+            draw_arrow(self.screen, 620, 536)
+
+    def draw_checking_line(self):
+        blit_text_shadow(
+            self.screen,
+            self.font_terminal,
+            "Checking up ID-CARD....",
+            WHITE,
+            SHADOW,
+            PROGRAM_RECT.x + 10,
+            PROGRAM_RECT.y + 190
+        )
+
+    def draw_done_line(self):
+        blit_text_shadow(
+            self.screen,
+            self.font_terminal,
+            "Door unlocked.",
+            GREEN,
+            DARK_GREEN,
+            PROGRAM_RECT.x + 10,
+            PROGRAM_RECT.y + 190
+        )
+
     def render(self):
-        if self.state == "boot_bg":
+        if self.state == "boot":
             self.screen.blit(self.bg, (0, 0))
 
-        elif self.state == "menu_empty":
-            self.screen.blit(self.frame_1, (0, 0))
+        elif self.state == "window_empty":
+            self.screen.blit(self.bg, (0, 0))
+            self.draw_program_empty()
 
-        elif self.state == "menu_info":
-            self.screen.blit(self.frame_2, (0, 0))
+        elif self.state == "typing_info":
+            self.draw_program_info_window()
 
         elif self.state == "question":
-            self.screen.blit(self.frame_3, (0, 0))
+            self.draw_program_info_window()
             self.draw_question_overlay()
 
         elif self.state == "checking":
-            self.screen.blit(self.frame_4, (0, 0))
+            self.draw_program_info_window()
+            self.draw_checking_line()
 
         elif self.state == "done":
-            self.screen.blit(self.frame_4, (0, 0))
-            self.draw_done_overlay()
+            self.draw_program_info_window()
+            self.draw_done_line()
 
         pygame.display.flip()
-
-    def draw_question_overlay(self):
-        # Overlay inferior para emular el texto de decisión
-        # Posiciones calibradas para 800x600
-        draw_shadow_text(
-            self.screen,
-            self.font_med,
-            PROMPT_TEXT_1,
-            (235, 235, 235),
-            (60, 60, 60),
-            (92, 502),
-        )
-        draw_shadow_text(
-            self.screen,
-            self.font_med,
-            PROMPT_TEXT_2,
-            (0, 150, 40),
-            (20, 40, 20),
-            (92, 545),
-        )
-
-        draw_shadow_text(
-            self.screen,
-            self.font_big,
-            "Yes",
-            (235, 235, 235),
-            (60, 60, 60),
-            (530, 528),
-        )
-        draw_shadow_text(
-            self.screen,
-            self.font_big,
-            "No",
-            (235, 235, 235),
-            (60, 60, 60),
-            (658, 528),
-        )
-
-        current = OPTIONS[self.selected_index]
-        draw_choice_arrow(self.screen, OPT_ARROW_POS[current])
-
-    def draw_done_overlay(self):
-        # Mensaje final sencillo
-        draw_shadow_text(
-            self.screen,
-            self.font_med,
-            "Door unlocked.",
-            (0, 220, 70),
-            (20, 40, 20),
-            (92, 545),
-        )
 
     def run(self):
         while self.running:
@@ -282,9 +364,9 @@ def main():
     pygame.mixer.init()
 
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-    pygame.display.set_caption("Resident Evil 2 - Door Lock Service")
+    pygame.display.set_caption("Door Lock Service")
 
-    app = DoorLockScene(screen)
+    app = RetroDoorLock(screen)
     app.run()
 
     pygame.quit()
