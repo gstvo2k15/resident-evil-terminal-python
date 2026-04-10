@@ -49,6 +49,7 @@ def load_image(path: Path) -> pygame.Surface:
     img = pygame.image.load(str(path)).convert()
     return pygame.transform.smoothscale(img, (SCREEN_W, SCREEN_H))
 
+
 def load_sound(path: Path):
     if not path.exists():
         return None
@@ -56,6 +57,7 @@ def load_sound(path: Path):
         return pygame.mixer.Sound(str(path))
     except pygame.error:
         return None
+
 
 bg = load_image(BG_IMAGE)
 
@@ -78,11 +80,11 @@ def play_sound(sound, loops=0):
     if sound:
         sound.play(loops=loops)
 
+
 def play_type_sound():
-    if snd_main:
-        # Evita cortar el sample demasiado agresivamente
-        if not type_channel.get_busy():
-            type_channel.play(snd_main)
+    if snd_main and not type_channel.get_busy():
+        type_channel.play(snd_main)
+
 
 def draw_shadow_text(surface, font, text, color, shadow_color, pos):
     x, y = pos
@@ -91,17 +93,21 @@ def draw_shadow_text(surface, font, text, color, shadow_color, pos):
     surface.blit(shadow, (x + 2, y + 2))
     surface.blit(main, (x, y))
 
+
 def lerp(a, b, t):
     return a + (b - a) * t
+
 
 def ease_out_cubic(t):
     t = max(0.0, min(1.0, t))
     return 1 - pow(1 - t, 3)
 
+
 def draw_arrow(surface, x, y):
     pts = [(x, y), (x + 14, y + 8), (x, y + 16)]
     pygame.draw.polygon(surface, WHITE_DIRTY, pts)
     pygame.draw.polygon(surface, SHADOW, pts, 1)
+
 
 def draw_scanlines(surface, alpha=18, step=2):
     overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
@@ -109,6 +115,7 @@ def draw_scanlines(surface, alpha=18, step=2):
     for y in range(0, h, step):
         pygame.draw.line(overlay, (0, 0, 0, alpha), (0, y), (w, y))
     surface.blit(overlay, (0, 0))
+
 
 def make_interior_surface(size):
     w, h = size
@@ -126,6 +133,7 @@ def make_interior_surface(size):
         pygame.draw.line(noise, (shade, shade, shade, 10), (0, y), (w, y))
     surf.blit(noise, (0, 0))
     return surf
+
 
 def draw_window(surface, rect, title="PROGRAM(011)"):
     x, y, w, h = rect
@@ -198,7 +206,6 @@ DONE_LINES = [
 
 QUESTION_1 = "Will you use the"
 QUESTION_2 = "Blue Card Key?"
-OPTIONS = ["Yes", "No"]
 
 # =========================================================
 # APP
@@ -266,6 +273,9 @@ class App:
             self.reset_typing()
 
         elif new_state == "question":
+            self.question_char_index_1 = 0
+            self.question_char_index_2 = 0
+            self.question_accum = 0.0
             play_sound(snd_main)
 
         elif new_state == "checking":
@@ -300,11 +310,11 @@ class App:
             base_text = line[0]
 
             if self.char_index < len(base_text):
-                self.visible_lines[-1] += base_text[self.char_index]
+                ch = base_text[self.char_index]
+                self.visible_lines[-1] += ch
                 self.char_index += 1
 
-                # Sonido recurrente de tecleo
-                if self.char_index % 2 == 1 and base_text[self.char_index - 1] != " ":
+                if ch != " ":
                     play_type_sound()
 
             else:
@@ -366,9 +376,8 @@ class App:
 
         elif self.state == "typing":
             self.update_typing(dt)
-            if self.line_index >= len(self.base_lines):
-                if self.state_timer >= 2.5:
-                    self.set_state("question")
+            if self.line_index >= len(self.base_lines) and self.state_timer >= 2.5:
+                self.set_state("question")
 
         elif self.state == "question":
             self.update_question_typing(dt)
@@ -408,9 +417,11 @@ class App:
                 if event.key in (pygame.K_LEFT, pygame.K_a):
                     self.selected = max(0, self.selected - 1)
                     play_sound(snd_main)
+
                 elif event.key in (pygame.K_RIGHT, pygame.K_d):
                     self.selected = min(1, self.selected + 1)
                     play_sound(snd_main)
+
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     if self.selected == 0:
                         self.set_state("checking")
@@ -423,11 +434,15 @@ class App:
 
     def draw_background(self):
         screen.blit(bg, (0, 0))
+
         overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 24))
         screen.blit(overlay, (0, 0))
 
     def draw_subtitle(self):
+        if self.state in ("question", "checking", "done"):
+            return
+
         draw_shadow_text(
             screen,
             font_prompt,
@@ -469,16 +484,16 @@ class App:
         q1 = QUESTION_1[:self.question_char_index_1]
         q2 = QUESTION_2[:self.question_char_index_2]
 
-        draw_shadow_text(screen, font_prompt, q1, WHITE_SOFT, SHADOW, (90, SCREEN_H - 82))
-        draw_shadow_text(screen, font_prompt, q2, GREEN_TEXT, GREEN_DARK, (390, SCREEN_H - 82))
+        draw_shadow_text(screen, font_prompt, q1, WHITE_SOFT, SHADOW, (90, SCREEN_H - 112))
+        draw_shadow_text(screen, font_prompt, q2, GREEN_TEXT, GREEN_DARK, (390, SCREEN_H - 112))
 
-        draw_shadow_text(screen, font_choice, "Yes", WHITE_DIRTY, SHADOW, (760, SCREEN_H - 56))
-        draw_shadow_text(screen, font_choice, "No", WHITE_DIRTY, SHADOW, (900, SCREEN_H - 56))
+        draw_shadow_text(screen, font_choice, "Yes", WHITE_DIRTY, SHADOW, (760, SCREEN_H - 78))
+        draw_shadow_text(screen, font_choice, "No", WHITE_DIRTY, SHADOW, (900, SCREEN_H - 78))
 
         if self.selected == 0:
-            draw_arrow(screen, 730, SCREEN_H - 44)
+            draw_arrow(screen, 730, SCREEN_H - 66)
         else:
-            draw_arrow(screen, 870, SCREEN_H - 44)
+            draw_arrow(screen, 870, SCREEN_H - 66)
 
     def draw_bottom_status(self):
         if self.state == "checking":
@@ -488,8 +503,9 @@ class App:
                 "Checking card...",
                 WHITE_SOFT,
                 SHADOW,
-                (90, SCREEN_H - 80)
+                (90, SCREEN_H - 112)
             )
+
         elif self.state == "done":
             draw_shadow_text(
                 screen,
@@ -497,7 +513,7 @@ class App:
                 "Hall side doors: ",
                 WHITE_SOFT,
                 SHADOW,
-                (90, SCREEN_H - 80)
+                (90, SCREEN_H - 112)
             )
             draw_shadow_text(
                 screen,
@@ -505,13 +521,12 @@ class App:
                 "UNLOCKED",
                 GREEN_TEXT,
                 GREEN_DARK,
-                (360, SCREEN_H - 80)
+                (360, SCREEN_H - 112)
             )
 
     def render(self):
         self.draw_background()
 
-        # Fondo vacío inicial sin consola
         if self.state != "idle_bg":
             rect = self.current_window_rect()
             inner_rect = draw_window(screen, rect, "PROGRAM(011)")
@@ -544,6 +559,7 @@ class App:
             self.render()
 
         wait_channel.stop()
+
 
 if __name__ == "__main__":
     app = App()
