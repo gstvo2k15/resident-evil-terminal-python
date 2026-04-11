@@ -42,7 +42,7 @@ deactivate
 `
 
 ### Wintel usage
-
+```powershell
     python.exe -m venv wintel
 
     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
@@ -52,3 +52,4 @@ deactivate
     pip install -r requirements.txt
 
     python main.py
+```
