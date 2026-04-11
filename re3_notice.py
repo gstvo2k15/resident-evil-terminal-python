@@ -4,9 +4,6 @@ from pathlib import Path
 
 import pygame
 
-# =========================================================
-# CONFIG
-# =========================================================
 BASE_DIR = Path(__file__).resolve().parent
 
 SCREEN_W = 1280
@@ -27,9 +24,6 @@ screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
 pygame.display.set_caption("Resident Evil 3 - STARS Notice")
 clock = pygame.time.Clock()
 
-# =========================================================
-# COLORS
-# =========================================================
 WHITE_DIRTY = (230, 232, 228)
 SHADOW = (70, 74, 90)
 GREEN_TEXT = (0, 210, 45)
@@ -41,9 +35,7 @@ FRAME_DARK = (54, 54, 54)
 
 BLACK = (0, 0, 0)
 
-# =========================================================
-# RESOURCES
-# =========================================================
+
 def load_image(path: Path) -> pygame.Surface:
     if not path.exists():
         raise FileNotFoundError(f"Missing file: {path}")
@@ -68,15 +60,10 @@ snd_waiting = load_sound(SND_WAITING)
 type_channel = pygame.mixer.Channel(2)
 wait_channel = pygame.mixer.Channel(3)
 
-# =========================================================
-# FONTS
-# =========================================================
 font_title = pygame.font.SysFont("couriernew", 28, bold=True)
 font_term = pygame.font.SysFont("couriernew", 30, bold=True)
 
-# =========================================================
-# HELPERS
-# =========================================================
+
 def play_sound(sound, loops=0):
     if sound:
         sound.play(loops=loops)
@@ -123,18 +110,14 @@ def draw_scanlines(surface, alpha=18, step=2):
 
 def build_scene_base() -> pygame.Surface:
     base = bg.copy()
-
     overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 22))
     base.blit(overlay, (0, 0))
-
     return base
 
 
 def make_console_background(scene_base: pygame.Surface, inner_rect: pygame.Rect) -> pygame.Surface:
-    """
-    Usa la porción real del fondo como interior de la consola.
-    """
+    """Use the real scene slice as the console background."""
     slice_surface = scene_base.subsurface(inner_rect).copy().convert_alpha()
 
     darken = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
@@ -197,9 +180,7 @@ def draw_window(surface, rect, scene_base, title="PROGRAM(1:1)"):
 
     return inner
 
-# =========================================================
-# CONTENT
-# =========================================================
+
 def build_notice_blocks(password: str):
     block_notice = [
         ("NOTICE TO STARS PERSONNEL", WHITE_DIRTY),
@@ -215,16 +196,13 @@ def build_notice_blocks(password: str):
     block_password = [
         ("", WHITE_DIRTY),
         ("Today's password for the", WHITE_DIRTY),
-        ("safe is ", WHITE_DIRTY, password, GREEN_TEXT),
-        (".", WHITE_DIRTY),
+        ("safe is ", WHITE_DIRTY, password, GREEN_TEXT, ".", WHITE_DIRTY),
         ("-", WHITE_DIRTY),
     ]
 
     return block_notice, block_body, block_password
 
-# =========================================================
-# APP
-# =========================================================
+
 class App:
     def __init__(self):
         self.running = True
@@ -256,7 +234,6 @@ class App:
         self.flash_done = False
         self.flash_timer = 0.0
 
-        # control de dots con pausas reales
         self.dots_total = 3
         self.dots_done = 0
         self.dot_step_delay = 0.45
@@ -286,7 +263,7 @@ class App:
             self.visible_lines = [""]
 
     def finalize_current_line(self, line):
-        if len(line) == 4:
+        if len(line) in (4, 6):
             self.visible_lines[-1] = line
             play_type_sound()
         else:
@@ -435,7 +412,7 @@ class App:
         self.visible_lines = []
 
         for line in self.notice_block:
-            if len(line) == 4:
+            if len(line) in (4, 6):
                 self.visible_lines.append(line)
             else:
                 self.visible_lines.append((line[0], line[1]))
@@ -443,13 +420,13 @@ class App:
         self.visible_lines.append(("...", WHITE_DIRTY))
 
         for line in self.body_block:
-            if len(line) == 4:
+            if len(line) in (4, 6):
                 self.visible_lines.append(line)
             else:
                 self.visible_lines.append((line[0], line[1]))
 
         for line in self.password_block:
-            if len(line) == 4:
+            if len(line) in (4, 6):
                 self.visible_lines.append(line)
             else:
                 self.visible_lines.append((line[0], line[1]))
@@ -505,6 +482,13 @@ class App:
                     draw_shadow_text(screen, font_term, left_txt, left_col, SHADOW, (x, y))
                     left_width = font_term.size(left_txt)[0]
                     draw_shadow_text(screen, font_term, right_txt, right_col, GREEN_DARK, (x + left_width, y))
+                elif len(item) == 6:
+                    left_txt, left_col, mid_txt, mid_col, right_txt, right_col = item
+                    draw_shadow_text(screen, font_term, left_txt, left_col, SHADOW, (x, y))
+                    offset = font_term.size(left_txt)[0]
+                    draw_shadow_text(screen, font_term, mid_txt, mid_col, GREEN_DARK, (x + offset, y))
+                    offset += font_term.size(mid_txt)[0]
+                    draw_shadow_text(screen, font_term, right_txt, right_col, SHADOW, (x + offset, y))
             y += line_h
 
     def render(self):
