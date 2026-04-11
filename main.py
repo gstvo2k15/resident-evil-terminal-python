@@ -1,5 +1,9 @@
+# pylint: disable=no-member,no-name-in-module
+"""Retro terminal-style door lock screen built with pygame."""
+
 import sys
 from pathlib import Path
+from typing import Optional
 
 import pygame
 
@@ -44,13 +48,15 @@ BLACK = (0, 0, 0)
 # RESOURCES
 # =========================================================
 def load_image(path: Path) -> pygame.Surface:
+    """Load and scale a background image to full screen."""
     if not path.exists():
         raise FileNotFoundError(f"Missing file: {path}")
     img = pygame.image.load(str(path)).convert()
     return pygame.transform.smoothscale(img, (SCREEN_W, SCREEN_H))
 
 
-def load_sound(path: Path):
+def load_sound(path: Path) -> Optional[pygame.mixer.Sound]:
+    """Load a sound file if it exists and is supported."""
     if not path.exists():
         return None
     try:
@@ -76,110 +82,196 @@ font_choice = pygame.font.SysFont("couriernew", 34, bold=True)
 # =========================================================
 # HELPERS
 # =========================================================
-def play_sound(sound, loops=0):
+def play_sound(sound: Optional[pygame.mixer.Sound], loops: int = 0) -> None:
+    """Play a sound if it is available."""
     if sound:
         sound.play(loops=loops)
 
 
-def play_type_sound():
+def play_type_sound() -> None:
+    """Play the typing sound if the typing channel is free."""
     if snd_main and not type_channel.get_busy():
         type_channel.play(snd_main)
 
 
-def draw_shadow_text(surface, font, text, color, shadow_color, pos):
-    x, y = pos
+def draw_shadow_text(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    text: str,
+    color: tuple[int, int, int],
+    shadow_color: tuple[int, int, int],
+    pos: tuple[int, int],
+) -> None:
+    """Draw text with a small shadow offset."""
+    x_pos, y_pos = pos
     shadow = font.render(text, True, shadow_color)
     main = font.render(text, True, color)
-    surface.blit(shadow, (x + 2, y + 2))
-    surface.blit(main, (x, y))
+    surface.blit(shadow, (x_pos + 2, y_pos + 2))
+    surface.blit(main, (x_pos, y_pos))
 
 
-def lerp(a, b, t):
-    return a + (b - a) * t
+def lerp(a_val: float, b_val: float, factor: float) -> float:
+    """Linearly interpolate between two values."""
+    return a_val + (b_val - a_val) * factor
 
 
-def ease_out_cubic(t):
-    t = max(0.0, min(1.0, t))
-    return 1 - pow(1 - t, 3)
+def ease_out_cubic(factor: float) -> float:
+    """Apply an ease-out cubic interpolation curve."""
+    factor = max(0.0, min(1.0, factor))
+    return 1 - pow(1 - factor, 3)
 
 
-def draw_arrow(surface, x, y):
-    pts = [(x, y), (x + 14, y + 8), (x, y + 16)]
-    pygame.draw.polygon(surface, WHITE_DIRTY, pts)
-    pygame.draw.polygon(surface, SHADOW, pts, 1)
+def draw_arrow(surface: pygame.Surface, x_pos: int, y_pos: int) -> None:
+    """Draw the selection arrow."""
+    points = [(x_pos, y_pos), (x_pos + 14, y_pos + 8), (x_pos, y_pos + 16)]
+    pygame.draw.polygon(surface, WHITE_DIRTY, points)
+    pygame.draw.polygon(surface, SHADOW, points, 1)
 
 
-def draw_scanlines(surface, alpha=18, step=2):
+def draw_scanlines(
+    surface: pygame.Surface,
+    alpha: int = 18,
+    step: int = 2,
+) -> None:
+    """Draw CRT-like scanlines over a surface."""
     overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-    w, h = surface.get_size()
-    for y in range(0, h, step):
-        pygame.draw.line(overlay, (0, 0, 0, alpha), (0, y), (w, y))
+    width, height = surface.get_size()
+    for y_pos in range(0, height, step):
+        pygame.draw.line(overlay, (0, 0, 0, alpha), (0, y_pos), (width, y_pos))
     surface.blit(overlay, (0, 0))
 
 
-def make_interior_surface(size):
-    w, h = size
-    surf = pygame.Surface((w, h))
-    for y in range(h):
-        t = y / max(1, h - 1)
-        r = int(lerp(INTERIOR_TOP[0], INTERIOR_BOTTOM[0], t))
-        g = int(lerp(INTERIOR_TOP[1], INTERIOR_BOTTOM[1], t))
-        b = int(lerp(INTERIOR_TOP[2], INTERIOR_BOTTOM[2], t))
-        pygame.draw.line(surf, (r, g, b), (0, y), (w, y))
+def make_interior_surface(size: tuple[int, int]) -> pygame.Surface:
+    """Create the inner textured panel surface."""
+    width, height = size
+    surface = pygame.Surface((width, height))
 
-    noise = pygame.Surface((w, h), pygame.SRCALPHA)
-    for y in range(0, h, 3):
-        shade = 8 if (y // 3) % 2 == 0 else 0
-        pygame.draw.line(noise, (shade, shade, shade, 10), (0, y), (w, y))
-    surf.blit(noise, (0, 0))
-    return surf
+    for y_pos in range(height):
+        factor = y_pos / max(1, height - 1)
+        red = int(lerp(INTERIOR_TOP[0], INTERIOR_BOTTOM[0], factor))
+        green = int(lerp(INTERIOR_TOP[1], INTERIOR_BOTTOM[1], factor))
+        blue = int(lerp(INTERIOR_TOP[2], INTERIOR_BOTTOM[2], factor))
+        pygame.draw.line(surface, (red, green, blue), (0, y_pos), (width, y_pos))
+
+    noise = pygame.Surface((width, height), pygame.SRCALPHA)
+    for y_pos in range(0, height, 3):
+        shade = 8 if (y_pos // 3) % 2 == 0 else 0
+        pygame.draw.line(
+            noise,
+            (shade, shade, shade, 10),
+            (0, y_pos),
+            (width, y_pos),
+        )
+    surface.blit(noise, (0, 0))
+    return surface
 
 
-def draw_window(surface, rect, title="PROGRAM(011)"):
-    x, y, w, h = rect
+def draw_window(
+    surface: pygame.Surface,
+    rect: pygame.Rect,
+    title: str = "PROGRAM(011)",
+) -> pygame.Rect:
+    """Draw the outer window and return the inner content rectangle."""
+    x_pos, y_pos, width, height = rect
 
     pygame.draw.rect(surface, FRAME_MID, rect)
     pygame.draw.rect(surface, FRAME_DARK, rect, 2)
-    pygame.draw.line(surface, WHITE_DIRTY, (x + 1, y + 1), (x + w - 2, y + 1))
-    pygame.draw.line(surface, WHITE_DIRTY, (x + 1, y + 1), (x + 1, y + h - 2))
-    pygame.draw.line(surface, FRAME_DARK, (x, y + h - 1), (x + w - 1, y + h - 1))
-    pygame.draw.line(surface, FRAME_DARK, (x + w - 1, y), (x + w - 1, y + h - 1))
+    pygame.draw.line(
+        surface,
+        WHITE_DIRTY,
+        (x_pos + 1, y_pos + 1),
+        (x_pos + width - 2, y_pos + 1),
+    )
+    pygame.draw.line(
+        surface,
+        WHITE_DIRTY,
+        (x_pos + 1, y_pos + 1),
+        (x_pos + 1, y_pos + height - 2),
+    )
+    pygame.draw.line(
+        surface,
+        FRAME_DARK,
+        (x_pos, y_pos + height - 1),
+        (x_pos + width - 1, y_pos + height - 1),
+    )
+    pygame.draw.line(
+        surface,
+        FRAME_DARK,
+        (x_pos + width - 1, y_pos),
+        (x_pos + width - 1, y_pos + height - 1),
+    )
 
-    bar_h = max(24, int(h * 0.05))
-    title_rect = pygame.Rect(x + 4, y + 4, w - 8, bar_h)
+    bar_height = max(24, int(height * 0.05))
+    title_rect = pygame.Rect(x_pos + 4, y_pos + 4, width - 8, bar_height)
     pygame.draw.rect(surface, FRAME_LIGHT, title_rect)
     pygame.draw.rect(surface, FRAME_DARK, title_rect, 1)
 
-    btn_w = 18
-    left_btn = pygame.Rect(x + 8, y + 7, btn_w, bar_h - 6)
-    right_btn = pygame.Rect(x + w - 8 - btn_w, y + 7, btn_w, bar_h - 6)
-    pygame.draw.rect(surface, FRAME_MID, left_btn)
-    pygame.draw.rect(surface, FRAME_MID, right_btn)
-    pygame.draw.rect(surface, FRAME_DARK, left_btn, 1)
-    pygame.draw.rect(surface, FRAME_DARK, right_btn, 1)
-    pygame.draw.line(surface, BLACK, (left_btn.x + 4, left_btn.centery), (left_btn.right - 4, left_btn.centery), 2)
-    pygame.draw.line(surface, BLACK, (right_btn.x + 4, right_btn.centery), (right_btn.right - 4, right_btn.centery), 2)
+    button_width = 18
+    left_button = pygame.Rect(x_pos + 8, y_pos + 7, button_width, bar_height - 6)
+    right_button = pygame.Rect(
+        x_pos + width - 8 - button_width,
+        y_pos + 7,
+        button_width,
+        bar_height - 6,
+    )
+    pygame.draw.rect(surface, FRAME_MID, left_button)
+    pygame.draw.rect(surface, FRAME_MID, right_button)
+    pygame.draw.rect(surface, FRAME_DARK, left_button, 1)
+    pygame.draw.rect(surface, FRAME_DARK, right_button, 1)
 
-    title_surf = font_title.render(title, True, (80, 80, 80))
-    title_pos = title_surf.get_rect(center=(x + w // 2, y + 4 + bar_h // 2))
-    surface.blit(title_surf, title_pos)
+    pygame.draw.line(
+        surface,
+        BLACK,
+        (left_button.x + 4, left_button.centery),
+        (left_button.right - 4, left_button.centery),
+        2,
+    )
+    pygame.draw.line(
+        surface,
+        BLACK,
+        (right_button.x + 4, right_button.centery),
+        (right_button.right - 4, right_button.centery),
+        2,
+    )
+
+    title_surface = font_title.render(title, True, (80, 80, 80))
+    title_pos = title_surface.get_rect(
+        center=(x_pos + width // 2, y_pos + 4 + bar_height // 2)
+    )
+    surface.blit(title_surface, title_pos)
 
     pad = 6
-    inner = pygame.Rect(x + pad, y + bar_h + pad, w - pad * 2, h - bar_h - pad * 2 - 10)
-    inner_surf = make_interior_surface((inner.w, inner.h))
-    surface.blit(inner_surf, inner.topleft)
+    inner = pygame.Rect(
+        x_pos + pad,
+        y_pos + bar_height + pad,
+        width - pad * 2,
+        height - bar_height - pad * 2 - 10,
+    )
+    inner_surface = make_interior_surface((inner.w, inner.h))
+    surface.blit(inner_surface, inner.topleft)
     pygame.draw.rect(surface, BLACK, inner, 2)
 
-    bottom_h = 12
-    bottom_rect = pygame.Rect(x + 4, y + h - bottom_h - 4, w - 8, bottom_h)
+    bottom_height = 12
+    bottom_rect = pygame.Rect(
+        x_pos + 4,
+        y_pos + height - bottom_height - 4,
+        width - 8,
+        bottom_height,
+    )
     pygame.draw.rect(surface, FRAME_LIGHT, bottom_rect)
     pygame.draw.rect(surface, FRAME_DARK, bottom_rect, 1)
 
-    handle = pygame.Rect(bottom_rect.x + 80, bottom_rect.y + 1, 18, bottom_rect.h - 2)
+    handle = pygame.Rect(
+        bottom_rect.x + 80,
+        bottom_rect.y + 1,
+        18,
+        bottom_rect.h - 2,
+    )
     pygame.draw.rect(surface, FRAME_MID, handle)
     pygame.draw.rect(surface, FRAME_DARK, handle, 1)
 
     return inner
+
 
 # =========================================================
 # TERMINAL CONTENT
@@ -207,11 +299,15 @@ DONE_LINES = [
 QUESTION_1 = "Will you use the"
 QUESTION_2 = "Blue Card Key?"
 
+
 # =========================================================
 # APP
 # =========================================================
 class App:
-    def __init__(self):
+    """Main application controller."""
+
+    def __init__(self) -> None:
+        """Initialize the application state."""
         self.running = True
         self.state = "idle_bg"
         self.state_timer = 0.0
@@ -245,27 +341,30 @@ class App:
         self.base_lines = INFO_LINES[:]
         self.replace_start_index = 4
 
-    def current_window_rect(self):
+    def current_window_rect(self) -> pygame.Rect:
+        """Return the current animated window rectangle."""
         if self.state != "grow":
             return self.target_rect.copy()
 
-        t = ease_out_cubic(min(1.0, self.state_timer / self.grow_duration))
-        sw, sh = self.grow_start_size
-        tw, th = self.target_rect.size
+        factor = ease_out_cubic(min(1.0, self.state_timer / self.grow_duration))
+        start_width, start_height = self.grow_start_size
+        target_width, target_height = self.target_rect.size
 
-        w = int(lerp(sw, tw, t))
-        h = int(lerp(sh, th, t))
-        x = int(lerp(self.grow_origin[0], self.target_rect.x, t))
-        y = int(lerp(self.grow_origin[1], self.target_rect.y, t))
-        return pygame.Rect(x, y, w, h)
+        width = int(lerp(start_width, target_width, factor))
+        height = int(lerp(start_height, target_height, factor))
+        x_pos = int(lerp(self.grow_origin[0], self.target_rect.x, factor))
+        y_pos = int(lerp(self.grow_origin[1], self.target_rect.y, factor))
+        return pygame.Rect(x_pos, y_pos, width, height)
 
-    def reset_typing(self):
+    def reset_typing(self) -> None:
+        """Reset main typing animation state."""
         self.visible_lines = [""]
         self.line_index = 0
         self.char_index = 0
         self.typing_accum = 0.0
 
-    def set_state(self, new_state):
+    def set_state(self, new_state: str) -> None:
+        """Set the current app state and initialize related values."""
         self.state = new_state
         self.state_timer = 0.0
 
@@ -288,17 +387,24 @@ class App:
             wait_channel.stop()
             play_sound(snd_accept)
 
-    def update_subtitle(self, dt):
+    def update_subtitle(self, dt: float) -> None:
+        """Advance subtitle typing animation."""
         if self.subtitle_index >= len(self.subtitle):
             return
+
         self.subtitle_accum += dt
         speed = 0.028
-        while self.subtitle_accum >= speed and self.subtitle_index < len(self.subtitle):
+
+        while (
+            self.subtitle_accum >= speed
+            and self.subtitle_index < len(self.subtitle)
+        ):
             self.subtitle_accum -= speed
             self.subtitle_visible += self.subtitle[self.subtitle_index]
             self.subtitle_index += 1
 
-    def update_typing(self, dt):
+    def update_typing(self, dt: float) -> None:
+        """Advance terminal text typing animation."""
         if self.line_index >= len(self.base_lines):
             return
 
@@ -310,13 +416,12 @@ class App:
             base_text = line[0]
 
             if self.char_index < len(base_text):
-                ch = base_text[self.char_index]
-                self.visible_lines[-1] += ch
+                char = base_text[self.char_index]
+                self.visible_lines[-1] += char
                 self.char_index += 1
 
-                if ch != " ":
+                if char != " ":
                     play_type_sound()
-
             else:
                 if len(line) == 4:
                     self.visible_lines[-1] = line
@@ -326,27 +431,30 @@ class App:
 
                 self.line_index += 1
                 self.char_index = 0
+
                 if self.line_index < len(self.base_lines):
                     self.visible_lines.append("")
 
-    def update_question_typing(self, dt):
+    def update_question_typing(self, dt: float) -> None:
+        """Advance the question typing animation."""
         self.question_accum += dt
         while self.question_accum >= self.question_speed:
             self.question_accum -= self.question_speed
 
             if self.question_char_index_1 < len(QUESTION_1):
-                ch = QUESTION_1[self.question_char_index_1]
+                char = QUESTION_1[self.question_char_index_1]
                 self.question_char_index_1 += 1
-                if ch != " ":
+                if char != " ":
                     play_type_sound()
 
             elif self.question_char_index_2 < len(QUESTION_2):
-                ch = QUESTION_2[self.question_char_index_2]
+                char = QUESTION_2[self.question_char_index_2]
                 self.question_char_index_2 += 1
-                if ch != " ":
+                if char != " ":
                     play_type_sound()
 
     def build_lines_for_current_state(self):
+        """Build terminal lines according to the current state."""
         lines = self.base_lines[:]
 
         if self.state in ("typing", "question"):
@@ -362,7 +470,8 @@ class App:
 
         return lines
 
-    def update(self, dt):
+    def update(self, dt: float) -> None:
+        """Update timers, animations, and state transitions."""
         self.state_timer += dt
         self.update_subtitle(dt)
 
@@ -391,7 +500,8 @@ class App:
             if self.state_timer >= 2.2:
                 self.set_state("done")
 
-    def handle_event(self, event):
+    def handle_event(self, event: pygame.event.Event) -> None:
+        """Handle window and keyboard events."""
         if event.type == pygame.QUIT:
             self.running = False
             return
@@ -432,14 +542,16 @@ class App:
                 if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     self.running = False
 
-    def draw_background(self):
+    def draw_background(self) -> None:
+        """Draw the static background and dark overlay."""
         screen.blit(bg, (0, 0))
 
         overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 24))
         screen.blit(overlay, (0, 0))
 
-    def draw_subtitle(self):
+    def draw_subtitle(self) -> None:
+        """Draw the animated subtitle when appropriate."""
         if self.state in ("question", "checking", "done"):
             return
 
@@ -449,53 +561,119 @@ class App:
             self.subtitle_visible,
             WHITE_SOFT,
             SHADOW,
-            (90, SCREEN_H - 80)
+            (90, SCREEN_H - 80),
         )
 
-    def draw_lines(self, inner_rect):
+    def draw_lines(self, inner_rect: pygame.Rect) -> None:
+        """Draw terminal lines inside the content area."""
         if self.state in ("typing", "question"):
             items = self.visible_lines
         else:
             items = self.build_lines_for_current_state()
 
-        x = inner_rect.x + 18
-        y = inner_rect.y + 10
-        line_h = 44
+        x_pos = inner_rect.x + 18
+        y_pos = inner_rect.y + 10
+        line_height = 44
 
         for idx, item in enumerate(items):
             if self.state == "checking" and idx == self.replace_start_index:
-                dynamic = f"Checking up ID-CARD{'.' * self.checking_dots}"
-                draw_shadow_text(screen, font_term, dynamic, WHITE_DIRTY, SHADOW, (x, y))
+                dynamic_text = f"Checking up ID-CARD{'.' * self.checking_dots}"
+                draw_shadow_text(
+                    screen,
+                    font_term,
+                    dynamic_text,
+                    WHITE_DIRTY,
+                    SHADOW,
+                    (x_pos, y_pos),
+                )
             else:
                 if isinstance(item, str):
-                    draw_shadow_text(screen, font_term, item, WHITE_DIRTY, SHADOW, (x, y))
+                    draw_shadow_text(
+                        screen,
+                        font_term,
+                        item,
+                        WHITE_DIRTY,
+                        SHADOW,
+                        (x_pos, y_pos),
+                    )
                 else:
                     if len(item) == 2:
-                        txt, color = item
-                        draw_shadow_text(screen, font_term, txt, color, SHADOW, (x, y))
+                        text, color = item
+                        draw_shadow_text(
+                            screen,
+                            font_term,
+                            text,
+                            color,
+                            SHADOW,
+                            (x_pos, y_pos),
+                        )
                     elif len(item) == 4:
-                        left_txt, left_col, right_txt, right_col = item
-                        draw_shadow_text(screen, font_term, left_txt, left_col, SHADOW, (x, y))
-                        left_width = font_term.size(left_txt)[0]
-                        draw_shadow_text(screen, font_term, right_txt, right_col, GREEN_DARK, (x + left_width, y))
-            y += line_h
+                        left_text, left_color, right_text, right_color = item
+                        draw_shadow_text(
+                            screen,
+                            font_term,
+                            left_text,
+                            left_color,
+                            SHADOW,
+                            (x_pos, y_pos),
+                        )
+                        left_width = font_term.size(left_text)[0]
+                        draw_shadow_text(
+                            screen,
+                            font_term,
+                            right_text,
+                            right_color,
+                            GREEN_DARK,
+                            (x_pos + left_width, y_pos),
+                        )
+            y_pos += line_height
 
-    def draw_question(self):
-        q1 = QUESTION_1[:self.question_char_index_1]
-        q2 = QUESTION_2[:self.question_char_index_2]
+    def draw_question(self) -> None:
+        """Draw the final yes/no question and selector."""
+        question_1 = QUESTION_1[:self.question_char_index_1]
+        question_2 = QUESTION_2[:self.question_char_index_2]
 
-        draw_shadow_text(screen, font_prompt, q1, WHITE_SOFT, SHADOW, (90, SCREEN_H - 112))
-        draw_shadow_text(screen, font_prompt, q2, GREEN_TEXT, GREEN_DARK, (390, SCREEN_H - 112))
+        draw_shadow_text(
+            screen,
+            font_prompt,
+            question_1,
+            WHITE_SOFT,
+            SHADOW,
+            (90, SCREEN_H - 112),
+        )
+        draw_shadow_text(
+            screen,
+            font_prompt,
+            question_2,
+            GREEN_TEXT,
+            GREEN_DARK,
+            (390, SCREEN_H - 112),
+        )
 
-        draw_shadow_text(screen, font_choice, "Yes", WHITE_DIRTY, SHADOW, (760, SCREEN_H - 78))
-        draw_shadow_text(screen, font_choice, "No", WHITE_DIRTY, SHADOW, (900, SCREEN_H - 78))
+        draw_shadow_text(
+            screen,
+            font_choice,
+            "Yes",
+            WHITE_DIRTY,
+            SHADOW,
+            (760, SCREEN_H - 78),
+        )
+        draw_shadow_text(
+            screen,
+            font_choice,
+            "No",
+            WHITE_DIRTY,
+            SHADOW,
+            (900, SCREEN_H - 78),
+        )
 
         if self.selected == 0:
             draw_arrow(screen, 730, SCREEN_H - 66)
         else:
             draw_arrow(screen, 870, SCREEN_H - 66)
 
-    def draw_bottom_status(self):
+    def draw_bottom_status(self) -> None:
+        """Draw lower status text for checking and done states."""
         if self.state == "checking":
             draw_shadow_text(
                 screen,
@@ -503,7 +681,7 @@ class App:
                 "Checking card...",
                 WHITE_SOFT,
                 SHADOW,
-                (90, SCREEN_H - 112)
+                (90, SCREEN_H - 112),
             )
 
         elif self.state == "done":
@@ -513,7 +691,7 @@ class App:
                 "Hall side doors: ",
                 WHITE_SOFT,
                 SHADOW,
-                (90, SCREEN_H - 112)
+                (90, SCREEN_H - 112),
             )
             draw_shadow_text(
                 screen,
@@ -521,10 +699,11 @@ class App:
                 "UNLOCKED",
                 GREEN_TEXT,
                 GREEN_DARK,
-                (360, SCREEN_H - 112)
+                (360, SCREEN_H - 112),
             )
 
-    def render(self):
+    def render(self) -> None:
+        """Render the current frame."""
         self.draw_background()
 
         if self.state != "idle_bg":
@@ -548,7 +727,8 @@ class App:
 
         pygame.display.flip()
 
-    def run(self):
+    def run(self) -> None:
+        """Run the main application loop."""
         while self.running:
             dt = clock.tick(FPS) / 1000.0
 
