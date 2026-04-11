@@ -40,8 +40,6 @@ GREEN_DARK = (10, 70, 18)
 FRAME_LIGHT = (208, 208, 208)
 FRAME_MID = (152, 152, 152)
 FRAME_DARK = (54, 54, 54)
-INTERIOR_TOP = (18, 31, 36)
-INTERIOR_BOTTOM = (10, 18, 22)
 BLACK = (0, 0, 0)
 
 # =========================================================
@@ -141,34 +139,45 @@ def draw_scanlines(
     surface.blit(overlay, (0, 0))
 
 
-def make_interior_surface(size: tuple[int, int]) -> pygame.Surface:
-    """Create the inner textured panel surface."""
-    width, height = size
-    surface = pygame.Surface((width, height))
+def build_scene_base() -> pygame.Surface:
+    """Build the original scene background used behind the terminal."""
+    base = bg.copy()
 
-    for y_pos in range(height):
-        factor = y_pos / max(1, height - 1)
-        red = int(lerp(INTERIOR_TOP[0], INTERIOR_BOTTOM[0], factor))
-        green = int(lerp(INTERIOR_TOP[1], INTERIOR_BOTTOM[1], factor))
-        blue = int(lerp(INTERIOR_TOP[2], INTERIOR_BOTTOM[2], factor))
-        pygame.draw.line(surface, (red, green, blue), (0, y_pos), (width, y_pos))
+    overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 24))
+    base.blit(overlay, (0, 0))
 
-    noise = pygame.Surface((width, height), pygame.SRCALPHA)
-    for y_pos in range(0, height, 3):
-        shade = 8 if (y_pos // 3) % 2 == 0 else 0
+    return base
+
+
+def make_terminal_background(
+    scene_base: pygame.Surface,
+    inner_rect: pygame.Rect,
+) -> pygame.Surface:
+    """Use the real background slice behind the terminal."""
+    slice_surface = scene_base.subsurface(inner_rect).copy().convert_alpha()
+
+    darken = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
+    darken.fill((0, 0, 0, 118))
+    slice_surface.blit(darken, (0, 0))
+
+    internal_scan = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
+    for y_pos in range(0, inner_rect.h, 3):
         pygame.draw.line(
-            noise,
-            (shade, shade, shade, 10),
+            internal_scan,
+            (255, 255, 255, 3),
             (0, y_pos),
-            (width, y_pos),
+            (inner_rect.w, y_pos),
         )
-    surface.blit(noise, (0, 0))
-    return surface
+    slice_surface.blit(internal_scan, (0, 0))
+
+    return slice_surface
 
 
 def draw_window(
     surface: pygame.Surface,
     rect: pygame.Rect,
+    scene_base: pygame.Surface,
     title: str = "PROGRAM(011)",
 ) -> pygame.Rect:
     """Draw the outer window and return the inner content rectangle."""
@@ -247,7 +256,8 @@ def draw_window(
         width - pad * 2,
         height - bar_height - pad * 2 - 10,
     )
-    inner_surface = make_interior_surface((inner.w, inner.h))
+
+    inner_surface = make_terminal_background(scene_base, inner)
     surface.blit(inner_surface, inner.topleft)
     pygame.draw.rect(surface, BLACK, inner, 2)
 
@@ -321,12 +331,12 @@ class App:
         self.visible_lines = []
         self.line_index = 0
         self.char_index = 0
-        self.typing_speed = 0.030
+        self.typing_speed = 0.060
         self.typing_accum = 0.0
 
         self.question_char_index_1 = 0
         self.question_char_index_2 = 0
-        self.question_speed = 0.022
+        self.question_speed = 0.045
         self.question_accum = 0.0
 
         self.selected = 0
@@ -493,11 +503,11 @@ class App:
 
         elif self.state == "checking":
             self.dot_timer += dt
-            if self.dot_timer >= 0.28:
+            if self.dot_timer >= 0.40:
                 self.dot_timer = 0.0
                 self.checking_dots = (self.checking_dots + 1) % 5
 
-            if self.state_timer >= 2.2:
+            if self.state_timer >= 2.8:
                 self.set_state("done")
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -536,19 +546,14 @@ class App:
                     if self.selected == 0:
                         self.set_state("checking")
                     else:
-                        play_sound(snd_main)
+                        if snd_accept:
+                            snd_accept.play()
+                            pygame.time.delay(350)
+                        self.running = False
 
             elif self.state == "done":
                 if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     self.running = False
-
-    def draw_background(self) -> None:
-        """Draw the static background and dark overlay."""
-        screen.blit(bg, (0, 0))
-
-        overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 24))
-        screen.blit(overlay, (0, 0))
 
     def draw_subtitle(self) -> None:
         """Draw the animated subtitle when appropriate."""
@@ -704,11 +709,12 @@ class App:
 
     def render(self) -> None:
         """Render the current frame."""
-        self.draw_background()
+        scene_base = build_scene_base()
+        screen.blit(scene_base, (0, 0))
 
         if self.state != "idle_bg":
             rect = self.current_window_rect()
-            inner_rect = draw_window(screen, rect, "PROGRAM(011)")
+            inner_rect = draw_window(screen, rect, scene_base, "PROGRAM(011)")
 
             if rect.w > 300 and rect.h > 140 and self.state != "grow":
                 self.draw_lines(inner_rect)
