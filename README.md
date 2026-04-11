@@ -1,6 +1,10 @@
-# Resident evil 2 PC Access 🔒
+# Resident evil 2 & 3 PC Access 🔒
 
-A fun simulation inspired by *Resident evil 2* main PC access for unlock RPD doors.
+A fun simulation inspired by *Resident evil 2 & 3* main PC access for unlock RPD doors.
+
+![alt text](re2_example.png)
+
+![alt text](re3_example.png)
 
 ---
 
@@ -39,4 +43,6 @@ deactivate
     pip install -r requirements.txt
 
     python re2_skycard.py
+
+    python re3_notice.py
 ```

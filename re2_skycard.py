@@ -546,7 +546,10 @@ class App:
                     if self.selected == 0:
                         self.set_state("checking")
                     else:
-                        play_sound(snd_main)
+                        if snd_accept:
+                            snd_accept.play()
+                            pygame.time.delay(350)
+                        self.running = False
 
             elif self.state == "done":
                 if event.key in (pygame.K_RETURN, pygame.K_SPACE):

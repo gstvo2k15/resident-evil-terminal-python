@@ -215,7 +215,8 @@ def build_notice_blocks(password: str):
     block_password = [
         ("", WHITE_DIRTY),
         ("Today's password for the", WHITE_DIRTY),
-        ("safe is ", WHITE_DIRTY, f"{password}.", GREEN_TEXT),
+        ("safe is ", WHITE_DIRTY, password, GREEN_TEXT),
+        (".", WHITE_DIRTY),
         ("-", WHITE_DIRTY),
     ]
 
