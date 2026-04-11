@@ -1,19 +1,6 @@
-# Jurassic Park Unix system Access Denied 🦖🔒
+# Resident evil 2 PC Access 🔒
 
-A fun simulation inspired by *Jurassic Park*, where Dennis Nedry's infamous *"You didn't say the magic word!"* blocks access.
-
-This python script creates a **fake login denial system**, displaying a looping GIF and playing an audio clip, with a UNIX-themed background.
-
-## 📸 Preview
-![Jurassic Access Denied](preview.png)
-
-## 🛠 Features
-- 🖥️ **GUI simulation** of a fake login system.
-- 🎥 **Animated GIF** of Dennis Nedry saying *"You didn't say the magic word!"*.
-- 🔊 **Sound effects** when attempting access.
-- 🖼️ **Custom UNIX background** from the movie.
-- 🎯 **Window auto-centering** on startup.
-- ✅ **Linted and follows best practices (pylint 10/10).**
+A fun simulation inspired by *Resident evil 2* main PC access for unlock RPD doors.
 
 ---
 
@@ -33,7 +20,7 @@ pip install -r requirements.txt
 
 ### **2️⃣ Run the Program**
 `
-python terminal.py
+python main.py
 `
 
 ### **3️⃣ Deactivate Virtual Environment when finished**
