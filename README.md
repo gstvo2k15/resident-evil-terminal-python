@@ -38,5 +38,5 @@ deactivate
 
     pip install -r requirements.txt
 
-    python main.py
+    python re2_skycard.py
 ```
