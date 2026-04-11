@@ -331,12 +331,12 @@ class App:
         self.visible_lines = []
         self.line_index = 0
         self.char_index = 0
-        self.typing_speed = 0.030
+        self.typing_speed = 0.060
         self.typing_accum = 0.0
 
         self.question_char_index_1 = 0
         self.question_char_index_2 = 0
-        self.question_speed = 0.022
+        self.question_speed = 0.045
         self.question_accum = 0.0
 
         self.selected = 0
@@ -503,11 +503,11 @@ class App:
 
         elif self.state == "checking":
             self.dot_timer += dt
-            if self.dot_timer >= 0.28:
+            if self.dot_timer >= 0.40:
                 self.dot_timer = 0.0
                 self.checking_dots = (self.checking_dots + 1) % 5
 
-            if self.state_timer >= 2.2:
+            if self.state_timer >= 2.8:
                 self.set_state("done")
 
     def handle_event(self, event: pygame.event.Event) -> None:
