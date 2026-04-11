@@ -15,8 +15,8 @@ FPS = 60
 
 BG_IMAGE = BASE_DIR / "Skycard_hd_0.png"
 
-SND_ACCEPT = BASE_DIR / "accept.mp3"
 SND_MAIN = BASE_DIR / "beep_main.mp3"
+SND_WAITING = BASE_DIR / "beep_waitting.mp3"
 
 PASSWORD_OPTIONS = ["0131", "0513", "4011", "4312"]
 
@@ -62,10 +62,11 @@ def load_sound(path: Path):
 
 bg = load_image(BG_IMAGE)
 
-snd_accept = load_sound(SND_ACCEPT)
 snd_main = load_sound(SND_MAIN)
+snd_waiting = load_sound(SND_WAITING)
 
 type_channel = pygame.mixer.Channel(2)
+wait_channel = pygame.mixer.Channel(3)
 
 # =========================================================
 # FONTS
@@ -84,6 +85,15 @@ def play_sound(sound, loops=0):
 def play_type_sound():
     if snd_main and not type_channel.get_busy():
         type_channel.play(snd_main)
+
+
+def start_waiting_sound():
+    if snd_waiting and not wait_channel.get_busy():
+        wait_channel.play(snd_waiting, loops=-1)
+
+
+def stop_waiting_sound():
+    wait_channel.stop()
 
 
 def draw_shadow_text(surface, font, text, color, shadow_color, pos):
@@ -112,14 +122,8 @@ def draw_scanlines(surface, alpha=18, step=2):
 
 
 def build_scene_base() -> pygame.Surface:
-    """
-    Construye el fondo base real de la escena.
-    La consola debe transparentar esta superficie, no el framebuffer ya
-    modificado por el marco de la ventana.
-    """
     base = bg.copy()
 
-    # Oscurecimiento global muy leve, igual que la escena anterior.
     overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 22))
     base.blit(overlay, (0, 0))
@@ -129,17 +133,14 @@ def build_scene_base() -> pygame.Surface:
 
 def make_console_background(scene_base: pygame.Surface, inner_rect: pygame.Rect) -> pygame.Surface:
     """
-    Usa la porción REAL del fondo como interior de la consola.
-    No genera un color plano ni un gradiente inventado.
+    Usa la porción real del fondo como interior de la consola.
     """
     slice_surface = scene_base.subsurface(inner_rect).copy().convert_alpha()
 
-    # Oscurecer de verdad la porción del fondo, no sustituirla.
     darken = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
     darken.fill((0, 0, 0, 118))
     slice_surface.blit(darken, (0, 0))
 
-    # Leve textura horizontal interna muy suave.
     internal_scan = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
     for yy in range(0, inner_rect.h, 3):
         pygame.draw.line(internal_scan, (255, 255, 255, 3), (0, yy), (inner_rect.w, yy))
@@ -151,7 +152,6 @@ def make_console_background(scene_base: pygame.Surface, inner_rect: pygame.Rect)
 def draw_window(surface, rect, scene_base, title="PROGRAM(1:1)"):
     x, y, w, h = rect
 
-    # Marco exterior
     pygame.draw.rect(surface, FRAME_MID, rect)
     pygame.draw.rect(surface, FRAME_DARK, rect, 2)
     pygame.draw.line(surface, WHITE_DIRTY, (x + 1, y + 1), (x + w - 2, y + 1))
@@ -159,13 +159,11 @@ def draw_window(surface, rect, scene_base, title="PROGRAM(1:1)"):
     pygame.draw.line(surface, FRAME_DARK, (x, y + h - 1), (x + w - 1, y + h - 1))
     pygame.draw.line(surface, FRAME_DARK, (x + w - 1, y), (x + w - 1, y + h - 1))
 
-    # Barra de título
     bar_h = max(24, int(h * 0.05))
     title_rect = pygame.Rect(x + 4, y + 4, w - 8, bar_h)
     pygame.draw.rect(surface, FRAME_LIGHT, title_rect)
     pygame.draw.rect(surface, FRAME_DARK, title_rect, 1)
 
-    # Botones falsos
     btn_w = 18
     left_btn = pygame.Rect(x + 8, y + 7, btn_w, bar_h - 6)
     right_btn = pygame.Rect(x + w - 8 - btn_w, y + 7, btn_w, bar_h - 6)
@@ -176,22 +174,18 @@ def draw_window(surface, rect, scene_base, title="PROGRAM(1:1)"):
     pygame.draw.line(surface, BLACK, (left_btn.x + 4, left_btn.centery), (left_btn.right - 4, left_btn.centery), 2)
     pygame.draw.line(surface, BLACK, (right_btn.x + 4, right_btn.centery), (right_btn.right - 4, right_btn.centery), 2)
 
-    # Título
     title_surf = font_title.render(title, True, (80, 80, 80))
     title_pos = title_surf.get_rect(center=(x + w // 2, y + 4 + bar_h // 2))
     surface.blit(title_surf, title_pos)
 
-    # Interior
     pad = 6
     inner = pygame.Rect(x + pad, y + bar_h + pad, w - pad * 2, h - bar_h - pad * 2 - 10)
 
-    # Fondo real de la escena detrás de la consola
     console_bg = make_console_background(scene_base, inner)
     surface.blit(console_bg, inner.topleft)
 
     pygame.draw.rect(surface, BLACK, inner, 2)
 
-    # Barra inferior
     bottom_h = 12
     bottom_rect = pygame.Rect(x + 4, y + h - bottom_h - 4, w - 8, bottom_h)
     pygame.draw.rect(surface, FRAME_LIGHT, bottom_rect)
@@ -211,10 +205,6 @@ def build_notice_blocks(password: str):
         ("NOTICE TO STARS PERSONNEL", WHITE_DIRTY),
     ]
 
-    block_dots = [
-        ("...", WHITE_DIRTY),
-    ]
-
     block_body = [
         ("Due to the emergency, the", WHITE_DIRTY),
         ("key to the STARS office has", WHITE_DIRTY),
@@ -229,7 +219,7 @@ def build_notice_blocks(password: str):
         ("-", WHITE_DIRTY),
     ]
 
-    return block_notice, block_dots, block_body, block_password
+    return block_notice, block_body, block_password
 
 # =========================================================
 # APP
@@ -241,7 +231,7 @@ class App:
         self.state_timer = 0.0
 
         self.password = random.choice(PASSWORD_OPTIONS)
-        self.notice_block, self.dots_block, self.body_block, self.password_block = build_notice_blocks(self.password)
+        self.notice_block, self.body_block, self.password_block = build_notice_blocks(self.password)
 
         self.target_rect = pygame.Rect(42, 40, 1020, 470)
         self.grow_origin = (120, 120)
@@ -249,9 +239,9 @@ class App:
         self.grow_duration = 0.48
         self.idle_bg_duration = 0.65
 
-        self.pause_after_notice = 0.95
-        self.pause_after_dots = 0.70
-        self.pause_before_password = 1.45
+        self.pause_after_notice = 1.85
+        self.pause_after_dots = 1.10
+        self.pause_before_password = 1.95
 
         self.visible_lines = []
         self.current_block = []
@@ -264,6 +254,11 @@ class App:
 
         self.flash_done = False
         self.flash_timer = 0.0
+
+        # control de dots con pausas reales
+        self.dots_total = 3
+        self.dots_done = 0
+        self.dot_step_delay = 0.45
 
     def current_window_rect(self):
         if self.state != "grow":
@@ -341,26 +336,50 @@ class App:
         if new_state == "typing_notice":
             self.visible_lines = [""]
             self.begin_block(self.notice_block)
+            stop_waiting_sound()
+
+        elif new_state == "pause_notice":
+            stop_waiting_sound()
 
         elif new_state == "typing_dots":
             if self.visible_lines and self.visible_lines[-1] != "":
                 self.visible_lines.append("")
-            self.begin_block(self.dots_block)
+            if not isinstance(self.visible_lines[-1], str):
+                self.visible_lines.append("")
+            self.visible_lines[-1] = ""
+            self.dots_done = 0
+            start_waiting_sound()
+
+        elif new_state == "pause_dots":
+            stop_waiting_sound()
 
         elif new_state == "typing_body":
             if self.visible_lines and self.visible_lines[-1] != "":
                 self.visible_lines.append("")
             self.begin_block(self.body_block)
+            stop_waiting_sound()
+
+        elif new_state == "pause_password":
+            stop_waiting_sound()
 
         elif new_state == "typing_password":
             if self.visible_lines and self.visible_lines[-1] != "":
                 self.visible_lines.append("")
             self.begin_block(self.password_block)
+            stop_waiting_sound()
 
         elif new_state == "done":
-            self.flash_done = True
-            self.flash_timer = 0.18
-            play_sound(snd_accept)
+            self.flash_done = False
+            self.flash_timer = 0.0
+            stop_waiting_sound()
+
+    def update_dots(self):
+        target_count = min(self.dots_total, int(self.state_timer / self.dot_step_delay))
+        if target_count > self.dots_done:
+            for _ in range(target_count - self.dots_done):
+                self.visible_lines[-1] += "."
+                self.dots_done += 1
+                play_sound(snd_waiting)
 
     def update(self, dt):
         self.state_timer += dt
@@ -388,8 +407,8 @@ class App:
                 self.set_state("typing_dots")
 
         elif self.state == "typing_dots":
-            self.update_typing_block(dt)
-            if self.block_done:
+            self.update_dots()
+            if self.dots_done >= self.dots_total and self.state_timer >= (self.dots_total * self.dot_step_delay + 0.15):
                 self.set_state("pause_dots")
 
         elif self.state == "pause_dots":
@@ -411,13 +430,29 @@ class App:
                 self.set_state("done")
 
     def skip_to_done(self):
+        stop_waiting_sound()
         self.visible_lines = []
-        for block in (self.notice_block, self.dots_block, self.body_block, self.password_block):
-            for line in block:
-                if len(line) == 4:
-                    self.visible_lines.append(line)
-                else:
-                    self.visible_lines.append((line[0], line[1]))
+
+        for line in self.notice_block:
+            if len(line) == 4:
+                self.visible_lines.append(line)
+            else:
+                self.visible_lines.append((line[0], line[1]))
+
+        self.visible_lines.append(("...", WHITE_DIRTY))
+
+        for line in self.body_block:
+            if len(line) == 4:
+                self.visible_lines.append(line)
+            else:
+                self.visible_lines.append((line[0], line[1]))
+
+        for line in self.password_block:
+            if len(line) == 4:
+                self.visible_lines.append(line)
+            else:
+                self.visible_lines.append((line[0], line[1]))
+
         self.set_state("done")
 
     def handle_event(self, event):
@@ -445,7 +480,7 @@ class App:
             elif self.state == "done":
                 if event.key == pygame.K_r:
                     self.password = random.choice(PASSWORD_OPTIONS)
-                    self.notice_block, self.dots_block, self.body_block, self.password_block = build_notice_blocks(self.password)
+                    self.notice_block, self.body_block, self.password_block = build_notice_blocks(self.password)
                     self.flash_done = False
                     self.set_state("typing_notice")
 
@@ -482,11 +517,6 @@ class App:
             if rect.w > 320 and rect.h > 160 and self.state != "grow":
                 self.draw_lines(inner_rect)
 
-        if self.flash_done:
-            flash = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-            flash.fill((255, 255, 255, 18))
-            screen.blit(flash, (0, 0))
-
         draw_scanlines(screen, alpha=18, step=2)
 
         flicker = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
@@ -504,6 +534,8 @@ class App:
 
             self.update(dt)
             self.render()
+
+        stop_waiting_sound()
 
 
 if __name__ == "__main__":
