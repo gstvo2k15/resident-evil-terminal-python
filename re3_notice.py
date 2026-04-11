@@ -16,7 +16,6 @@ FPS = 60
 BG_IMAGE = BASE_DIR / "Skycard_hd_0.png"
 
 SND_ACCEPT = BASE_DIR / "accept.mp3"
-SND_WAITING = BASE_DIR / "beep_waitting.mp3"
 SND_MAIN = BASE_DIR / "beep_main.mp3"
 
 PASSWORD_OPTIONS = ["0131", "0513", "4011", "4312"]
@@ -35,11 +34,11 @@ WHITE_DIRTY = (230, 232, 228)
 SHADOW = (70, 74, 90)
 GREEN_TEXT = (0, 210, 45)
 GREEN_DARK = (10, 70, 18)
+
 FRAME_LIGHT = (208, 208, 208)
 FRAME_MID = (152, 152, 152)
 FRAME_DARK = (54, 54, 54)
-INTERIOR_TOP = (18, 31, 36)
-INTERIOR_BOTTOM = (10, 18, 22)
+
 BLACK = (0, 0, 0)
 
 # =========================================================
@@ -64,14 +63,15 @@ def load_sound(path: Path):
 bg = load_image(BG_IMAGE)
 
 snd_accept = load_sound(SND_ACCEPT)
-snd_waiting = load_sound(SND_WAITING)
 snd_main = load_sound(SND_MAIN)
 
 type_channel = pygame.mixer.Channel(2)
 
-# Ajustadas para parecerse más a la referencia
-font_title = pygame.font.SysFont("couriernew", 26, bold=True)
-font_term = pygame.font.SysFont("couriernew", 28, bold=True)
+# =========================================================
+# FONTS
+# =========================================================
+font_title = pygame.font.SysFont("couriernew", 28, bold=True)
+font_term = pygame.font.SysFont("couriernew", 30, bold=True)
 
 # =========================================================
 # HELPERS
@@ -111,27 +111,47 @@ def draw_scanlines(surface, alpha=18, step=2):
     surface.blit(overlay, (0, 0))
 
 
-def make_interior_surface(size):
-    w, h = size
-    surf = pygame.Surface((w, h))
-    for y in range(h):
-        t = y / max(1, h - 1)
-        r = int(lerp(INTERIOR_TOP[0], INTERIOR_BOTTOM[0], t))
-        g = int(lerp(INTERIOR_TOP[1], INTERIOR_BOTTOM[1], t))
-        b = int(lerp(INTERIOR_TOP[2], INTERIOR_BOTTOM[2], t))
-        pygame.draw.line(surf, (r, g, b), (0, y), (w, y))
+def build_scene_base() -> pygame.Surface:
+    """
+    Construye el fondo base real de la escena.
+    La consola debe transparentar esta superficie, no el framebuffer ya
+    modificado por el marco de la ventana.
+    """
+    base = bg.copy()
 
-    noise = pygame.Surface((w, h), pygame.SRCALPHA)
-    for y in range(0, h, 3):
-        shade = 8 if (y // 3) % 2 == 0 else 0
-        pygame.draw.line(noise, (shade, shade, shade, 10), (0, y), (w, y))
-    surf.blit(noise, (0, 0))
-    return surf
+    # Oscurecimiento global muy leve, igual que la escena anterior.
+    overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 22))
+    base.blit(overlay, (0, 0))
+
+    return base
 
 
-def draw_window(surface, rect, title="PROGRAM(1:1)"):
+def make_console_background(scene_base: pygame.Surface, inner_rect: pygame.Rect) -> pygame.Surface:
+    """
+    Usa la porción REAL del fondo como interior de la consola.
+    No genera un color plano ni un gradiente inventado.
+    """
+    slice_surface = scene_base.subsurface(inner_rect).copy().convert_alpha()
+
+    # Oscurecer de verdad la porción del fondo, no sustituirla.
+    darken = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
+    darken.fill((0, 0, 0, 118))
+    slice_surface.blit(darken, (0, 0))
+
+    # Leve textura horizontal interna muy suave.
+    internal_scan = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
+    for yy in range(0, inner_rect.h, 3):
+        pygame.draw.line(internal_scan, (255, 255, 255, 3), (0, yy), (inner_rect.w, yy))
+    slice_surface.blit(internal_scan, (0, 0))
+
+    return slice_surface
+
+
+def draw_window(surface, rect, scene_base, title="PROGRAM(1:1)"):
     x, y, w, h = rect
 
+    # Marco exterior
     pygame.draw.rect(surface, FRAME_MID, rect)
     pygame.draw.rect(surface, FRAME_DARK, rect, 2)
     pygame.draw.line(surface, WHITE_DIRTY, (x + 1, y + 1), (x + w - 2, y + 1))
@@ -139,11 +159,13 @@ def draw_window(surface, rect, title="PROGRAM(1:1)"):
     pygame.draw.line(surface, FRAME_DARK, (x, y + h - 1), (x + w - 1, y + h - 1))
     pygame.draw.line(surface, FRAME_DARK, (x + w - 1, y), (x + w - 1, y + h - 1))
 
+    # Barra de título
     bar_h = max(24, int(h * 0.05))
     title_rect = pygame.Rect(x + 4, y + 4, w - 8, bar_h)
     pygame.draw.rect(surface, FRAME_LIGHT, title_rect)
     pygame.draw.rect(surface, FRAME_DARK, title_rect, 1)
 
+    # Botones falsos
     btn_w = 18
     left_btn = pygame.Rect(x + 8, y + 7, btn_w, bar_h - 6)
     right_btn = pygame.Rect(x + w - 8 - btn_w, y + 7, btn_w, bar_h - 6)
@@ -154,16 +176,22 @@ def draw_window(surface, rect, title="PROGRAM(1:1)"):
     pygame.draw.line(surface, BLACK, (left_btn.x + 4, left_btn.centery), (left_btn.right - 4, left_btn.centery), 2)
     pygame.draw.line(surface, BLACK, (right_btn.x + 4, right_btn.centery), (right_btn.right - 4, right_btn.centery), 2)
 
+    # Título
     title_surf = font_title.render(title, True, (80, 80, 80))
     title_pos = title_surf.get_rect(center=(x + w // 2, y + 4 + bar_h // 2))
     surface.blit(title_surf, title_pos)
 
+    # Interior
     pad = 6
     inner = pygame.Rect(x + pad, y + bar_h + pad, w - pad * 2, h - bar_h - pad * 2 - 10)
-    inner_surf = make_interior_surface((inner.w, inner.h))
-    surface.blit(inner_surf, inner.topleft)
+
+    # Fondo real de la escena detrás de la consola
+    console_bg = make_console_background(scene_base, inner)
+    surface.blit(console_bg, inner.topleft)
+
     pygame.draw.rect(surface, BLACK, inner, 2)
 
+    # Barra inferior
     bottom_h = 12
     bottom_rect = pygame.Rect(x + 4, y + h - bottom_h - 4, w - 8, bottom_h)
     pygame.draw.rect(surface, FRAME_LIGHT, bottom_rect)
@@ -179,37 +207,29 @@ def draw_window(surface, rect, title="PROGRAM(1:1)"):
 # CONTENT
 # =========================================================
 def build_notice_blocks(password: str):
-    return [
-        {
-            "pause_after": 0.55,
-            "lines": [
-                ("NOTICE TO STARS PERSONNEL", WHITE_DIRTY),
-            ],
-        },
-        {
-            "pause_after": 0.40,
-            "lines": [
-                ("...", WHITE_DIRTY),
-            ],
-        },
-        {
-            "pause_after": 0.60,
-            "lines": [
-                ("Due to the emergency, the", WHITE_DIRTY),
-                ("key to the STARS office has", WHITE_DIRTY),
-                ("been moved to the evidence", WHITE_DIRTY),
-                ("room.", WHITE_DIRTY),
-            ],
-        },
-        {
-            "pause_after": 0.35,
-            "lines": [
-                ("", WHITE_DIRTY),
-                ("Today's password for the", WHITE_DIRTY),
-                ("safe is ", WHITE_DIRTY, f"{password}.", GREEN_TEXT),
-            ],
-        },
+    block_notice = [
+        ("NOTICE TO STARS PERSONNEL", WHITE_DIRTY),
     ]
+
+    block_dots = [
+        ("...", WHITE_DIRTY),
+    ]
+
+    block_body = [
+        ("Due to the emergency, the", WHITE_DIRTY),
+        ("key to the STARS office has", WHITE_DIRTY),
+        ("been moved to the evidence", WHITE_DIRTY),
+        ("room.", WHITE_DIRTY),
+    ]
+
+    block_password = [
+        ("", WHITE_DIRTY),
+        ("Today's password for the", WHITE_DIRTY),
+        ("safe is ", WHITE_DIRTY, f"{password}.", GREEN_TEXT),
+        ("-", WHITE_DIRTY),
+    ]
+
+    return block_notice, block_dots, block_body, block_password
 
 # =========================================================
 # APP
@@ -221,24 +241,26 @@ class App:
         self.state_timer = 0.0
 
         self.password = random.choice(PASSWORD_OPTIONS)
-        self.blocks = build_notice_blocks(self.password)
+        self.notice_block, self.dots_block, self.body_block, self.password_block = build_notice_blocks(self.password)
 
-        # Más cerca del tamaño y proporción de la referencia
-        self.target_rect = pygame.Rect(42, 42, 860, 430)
+        self.target_rect = pygame.Rect(42, 40, 1020, 470)
         self.grow_origin = (120, 120)
         self.grow_start_size = (140, 72)
         self.grow_duration = 0.48
         self.idle_bg_duration = 0.65
 
-        self.visible_lines = []
-        self.typing_speed = 0.050
-        self.typing_accum = 0.0
+        self.pause_after_notice = 0.95
+        self.pause_after_dots = 0.70
+        self.pause_before_password = 1.45
 
+        self.visible_lines = []
+        self.current_block = []
         self.block_index = 0
-        self.line_index = 0
-        self.char_index = 0
-        self.phase = "typing_block"  # typing_block / pause_between_blocks / finished
-        self.pause_timer = 0.0
+        self.block_char = 0
+        self.block_done = False
+
+        self.typing_speed = 0.040
+        self.typing_accum = 0.0
 
         self.flash_done = False
         self.flash_timer = 0.0
@@ -257,88 +279,88 @@ class App:
         y = int(lerp(self.grow_origin[1], self.target_rect.y, t))
         return pygame.Rect(x, y, w, h)
 
-    def reset_typing(self):
-        self.visible_lines = []
-        self.typing_accum = 0.0
+    def begin_block(self, block_lines):
+        self.current_block = block_lines
         self.block_index = 0
-        self.line_index = 0
-        self.char_index = 0
-        self.phase = "typing_block"
-        self.pause_timer = 0.0
+        self.block_char = 0
+        self.block_done = False
+        self.typing_accum = 0.0
 
-    def set_state(self, new_state):
-        self.state = new_state
-        self.state_timer = 0.0
-
-        if new_state == "typing":
-            self.reset_typing()
-
-        elif new_state == "done":
-            self.flash_done = True
-            self.flash_timer = 0.18
-            play_sound(snd_accept)
-
-    def append_new_visible_line(self):
-        self.visible_lines.append("")
+        if not self.visible_lines:
+            self.visible_lines = [""]
 
     def finalize_current_line(self, line):
         if len(line) == 4:
             self.visible_lines[-1] = line
             play_type_sound()
         else:
-            current_text = self.visible_lines[-1]
-            self.visible_lines[-1] = (current_text, line[1])
+            if isinstance(self.visible_lines[-1], str):
+                self.visible_lines[-1] = (self.visible_lines[-1], line[1])
+            else:
+                self.visible_lines[-1] = line
 
-    def update_typing(self, dt):
-        if self.phase == "finished":
+    def update_typing_block(self, dt):
+        if self.block_done:
             return
-
-        if self.phase == "pause_between_blocks":
-            self.pause_timer -= dt
-            if self.pause_timer <= 0:
-                self.block_index += 1
-                self.line_index = 0
-                self.char_index = 0
-
-                if self.block_index >= len(self.blocks):
-                    self.phase = "finished"
-                else:
-                    self.phase = "typing_block"
-            return
-
-        if self.block_index >= len(self.blocks):
-            self.phase = "finished"
-            return
-
-        block = self.blocks[self.block_index]
-        lines = block["lines"]
 
         self.typing_accum += dt
-        while self.typing_accum >= self.typing_speed and self.phase == "typing_block":
+        while self.typing_accum >= self.typing_speed and not self.block_done:
             self.typing_accum -= self.typing_speed
 
-            if self.line_index >= len(lines):
-                self.phase = "pause_between_blocks"
-                self.pause_timer = block["pause_after"]
+            if self.block_index >= len(self.current_block):
+                self.block_done = True
                 break
 
-            line = lines[self.line_index]
-            base_text = line[0]
+            line = self.current_block[self.block_index]
+            text = line[0]
 
-            if self.char_index == 0:
-                self.append_new_visible_line()
-
-            if self.char_index < len(base_text):
-                ch = base_text[self.char_index]
+            if self.block_char < len(text):
+                ch = text[self.block_char]
+                if not isinstance(self.visible_lines[-1], str):
+                    self.visible_lines.append("")
                 self.visible_lines[-1] += ch
-                self.char_index += 1
+                self.block_char += 1
 
                 if ch != " ":
                     play_type_sound()
+
             else:
                 self.finalize_current_line(line)
-                self.line_index += 1
-                self.char_index = 0
+                self.block_index += 1
+                self.block_char = 0
+
+                if self.block_index < len(self.current_block):
+                    self.visible_lines.append("")
+                else:
+                    self.block_done = True
+
+    def set_state(self, new_state):
+        self.state = new_state
+        self.state_timer = 0.0
+
+        if new_state == "typing_notice":
+            self.visible_lines = [""]
+            self.begin_block(self.notice_block)
+
+        elif new_state == "typing_dots":
+            if self.visible_lines and self.visible_lines[-1] != "":
+                self.visible_lines.append("")
+            self.begin_block(self.dots_block)
+
+        elif new_state == "typing_body":
+            if self.visible_lines and self.visible_lines[-1] != "":
+                self.visible_lines.append("")
+            self.begin_block(self.body_block)
+
+        elif new_state == "typing_password":
+            if self.visible_lines and self.visible_lines[-1] != "":
+                self.visible_lines.append("")
+            self.begin_block(self.password_block)
+
+        elif new_state == "done":
+            self.flash_done = True
+            self.flash_timer = 0.18
+            play_sound(snd_accept)
 
     def update(self, dt):
         self.state_timer += dt
@@ -354,25 +376,49 @@ class App:
 
         elif self.state == "grow":
             if self.state_timer >= self.grow_duration:
-                self.set_state("typing")
+                self.set_state("typing_notice")
 
-        elif self.state == "typing":
-            self.update_typing(dt)
-            if self.phase == "finished" and self.state_timer >= 3.4:
+        elif self.state == "typing_notice":
+            self.update_typing_block(dt)
+            if self.block_done:
+                self.set_state("pause_notice")
+
+        elif self.state == "pause_notice":
+            if self.state_timer >= self.pause_after_notice:
+                self.set_state("typing_dots")
+
+        elif self.state == "typing_dots":
+            self.update_typing_block(dt)
+            if self.block_done:
+                self.set_state("pause_dots")
+
+        elif self.state == "pause_dots":
+            if self.state_timer >= self.pause_after_dots:
+                self.set_state("typing_body")
+
+        elif self.state == "typing_body":
+            self.update_typing_block(dt)
+            if self.block_done:
+                self.set_state("pause_password")
+
+        elif self.state == "pause_password":
+            if self.state_timer >= self.pause_before_password:
+                self.set_state("typing_password")
+
+        elif self.state == "typing_password":
+            self.update_typing_block(dt)
+            if self.block_done:
                 self.set_state("done")
 
-    def skip_all_typing(self):
+    def skip_to_done(self):
         self.visible_lines = []
-        for block in self.blocks:
-            for line in block["lines"]:
+        for block in (self.notice_block, self.dots_block, self.body_block, self.password_block):
+            for line in block:
                 if len(line) == 4:
                     self.visible_lines.append(line)
                 else:
                     self.visible_lines.append((line[0], line[1]))
-        self.phase = "finished"
-        self.block_index = len(self.blocks)
-        self.line_index = 0
-        self.char_index = 0
+        self.set_state("done")
 
     def handle_event(self, event):
         if event.type == pygame.QUIT:
@@ -384,31 +430,32 @@ class App:
                 self.running = False
                 return
 
-            if self.state == "typing":
+            if self.state in {
+                "typing_notice",
+                "pause_notice",
+                "typing_dots",
+                "pause_dots",
+                "typing_body",
+                "pause_password",
+                "typing_password",
+            }:
                 if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                    self.skip_all_typing()
-                    self.state_timer = 999
+                    self.skip_to_done()
 
             elif self.state == "done":
                 if event.key == pygame.K_r:
                     self.password = random.choice(PASSWORD_OPTIONS)
-                    self.blocks = build_notice_blocks(self.password)
-                    self.set_state("typing")
+                    self.notice_block, self.dots_block, self.body_block, self.password_block = build_notice_blocks(self.password)
+                    self.flash_done = False
+                    self.set_state("typing_notice")
 
                 elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     self.running = False
 
-    def draw_background(self):
-        screen.blit(bg, (0, 0))
-
-        overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 22))
-        screen.blit(overlay, (0, 0))
-
     def draw_lines(self, inner_rect):
-        x = inner_rect.x + 16
-        y = inner_rect.y + 6
-        line_h = 40
+        x = inner_rect.x + 18
+        y = inner_rect.y + 2
+        line_h = 46
 
         for item in self.visible_lines:
             if isinstance(item, str):
@@ -422,15 +469,15 @@ class App:
                     draw_shadow_text(screen, font_term, left_txt, left_col, SHADOW, (x, y))
                     left_width = font_term.size(left_txt)[0]
                     draw_shadow_text(screen, font_term, right_txt, right_col, GREEN_DARK, (x + left_width, y))
-
             y += line_h
 
     def render(self):
-        self.draw_background()
+        scene_base = build_scene_base()
+        screen.blit(scene_base, (0, 0))
 
         if self.state != "idle_bg":
             rect = self.current_window_rect()
-            inner_rect = draw_window(screen, rect, "PROGRAM(1:1)")
+            inner_rect = draw_window(screen, rect, scene_base, "PROGRAM(1:1)")
 
             if rect.w > 320 and rect.h > 160 and self.state != "grow":
                 self.draw_lines(inner_rect)
