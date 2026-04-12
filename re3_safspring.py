@@ -1,5 +1,4 @@
 import sys
-import random
 from pathlib import Path
 
 import pygame
@@ -12,7 +11,8 @@ FPS = 60
 
 BG_IMAGE = BASE_DIR / "safsprinHd_Fixed_BASE.png"
 
-SND_OPEN = BASE_DIR / "safsprin_openning_terminal_letters_pc.mp3"
+# Corrige este nombre si tu archivo real tiene otro distinto.
+SND_OPEN = BASE_DIR / "re3_openning_terminal_letters_pc.mp3"
 SND_LETTERS = BASE_DIR / "safsprin_letters_pc.mp3"
 SND_CHOOSE = BASE_DIR / "safsprin_chosing_single_letters_pc.mp3"
 SND_ENTER = BASE_DIR / "safsprin_enter_passwd_pc.mp3"
@@ -20,6 +20,7 @@ SND_FINISH = BASE_DIR / "safsprin_finish_passwd_pc.mp3"
 
 PASSWORD_OPTIONS = ["SAFSPRIN", "ADRAVIL", "AQUACURE"]
 
+pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
 pygame.mixer.init()
 
@@ -57,11 +58,11 @@ def load_image(path: Path) -> pygame.Surface:
 
 def load_sound(path: Path):
     if not path.exists():
-        return None
+        raise FileNotFoundError(f"Missing sound file: {path}")
     try:
         return pygame.mixer.Sound(str(path))
-    except pygame.error:
-        return None
+    except pygame.error as e:
+        raise RuntimeError(f"Cannot load sound {path}: {e}")
 
 
 bg = load_image(BG_IMAGE)
@@ -71,18 +72,6 @@ snd_letters = load_sound(SND_LETTERS)
 snd_choose = load_sound(SND_CHOOSE)
 snd_enter = load_sound(SND_ENTER)
 snd_finish = load_sound(SND_FINISH)
-
-
-def play_typing_open():
-    if snd_open:
-        typing_channel.stop()
-        typing_channel.play(snd_open)
-
-
-def play_typing_normal():
-    if snd_letters:
-        typing_channel.stop()
-        typing_channel.play(snd_letters)
 
 
 def play_choose():
@@ -144,7 +133,12 @@ def make_scene_window_background(scene_base, inner_rect):
 
     internal_scan = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
     for y_pos in range(0, inner_rect.h, 3):
-        pygame.draw.line(internal_scan, (255, 255, 255, 3), (0, y_pos), (inner_rect.w, y_pos))
+        pygame.draw.line(
+            internal_scan,
+            (255, 255, 255, 3),
+            (0, y_pos),
+            (inner_rect.w, y_pos),
+        )
     slice_surface.blit(internal_scan, (0, 0))
     return slice_surface
 
@@ -359,6 +353,10 @@ class App:
         self.flash_timer = 0.0
         self.flash_alpha = 0
 
+        # Controla la repetición del sonido de tecleo sin depender de get_busy()
+        self.typing_sound_cooldown = 0.0
+        self.typing_sound_interval = 0.045
+
     def current_window_rect(self):
         if self.state != "grow":
             return self.target_rect.copy()
@@ -399,10 +397,15 @@ class App:
                 self.visible_lines[-1] = line
 
     def play_char_sound(self):
-        if self.state == "typing_opening":
-            play_typing_open()
-        else:
-            play_typing_normal()
+        if self.typing_sound_cooldown > 0:
+            return
+
+        sound = snd_open if self.state == "typing_opening" else snd_letters
+        if sound:
+            typing_channel.stop()
+            typing_channel.play(sound)
+
+        self.typing_sound_cooldown = self.typing_sound_interval
 
     def update_typing_block(self, dt):
         if self.block_done:
@@ -472,7 +475,6 @@ class App:
             self.cursor_on = False
 
     def submit_password(self):
-        play_finish()
         if self.input_text in self.valid_passwords:
             self.set_state("submitting")
         else:
@@ -535,6 +537,9 @@ class App:
 
     def update(self, dt):
         self.state_timer += dt
+
+        if self.typing_sound_cooldown > 0:
+            self.typing_sound_cooldown -= dt
 
         if self.flash_timer > 0:
             self.flash_timer -= dt
@@ -670,6 +675,8 @@ class App:
 
 
 if __name__ == "__main__":
-    App().run()
-    pygame.quit()
-    sys.exit()
+    try:
+        App().run()
+    finally:
+        pygame.quit()
+        sys.exit()
