@@ -1,15 +1,9 @@
-# pylint: disable=no-member,no-name-in-module
-"""Retro terminal-style door lock screen built with pygame."""
-
 import sys
 from pathlib import Path
 from typing import Optional
 
 import pygame
 
-# =========================================================
-# CONFIG
-# =========================================================
 BASE_DIR = Path(__file__).resolve().parent
 
 SCREEN_W = 1280
@@ -29,9 +23,6 @@ screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
 pygame.display.set_caption("Door Lock Service")
 clock = pygame.time.Clock()
 
-# =========================================================
-# COLORS
-# =========================================================
 WHITE_DIRTY = (230, 232, 228)
 WHITE_SOFT = (200, 202, 198)
 SHADOW = (70, 74, 90)
@@ -42,11 +33,8 @@ FRAME_MID = (152, 152, 152)
 FRAME_DARK = (54, 54, 54)
 BLACK = (0, 0, 0)
 
-# =========================================================
-# RESOURCES
-# =========================================================
+
 def load_image(path: Path) -> pygame.Surface:
-    """Load and scale a background image to full screen."""
     if not path.exists():
         raise FileNotFoundError(f"Missing file: {path}")
     img = pygame.image.load(str(path)).convert()
@@ -54,7 +42,6 @@ def load_image(path: Path) -> pygame.Surface:
 
 
 def load_sound(path: Path) -> Optional[pygame.mixer.Sound]:
-    """Load a sound file if it exists and is supported."""
     if not path.exists():
         return None
     try:
@@ -77,17 +64,13 @@ font_term = pygame.font.SysFont("couriernew", 30, bold=True)
 font_prompt = pygame.font.SysFont("couriernew", 26, bold=True)
 font_choice = pygame.font.SysFont("couriernew", 34, bold=True)
 
-# =========================================================
-# HELPERS
-# =========================================================
+
 def play_sound(sound: Optional[pygame.mixer.Sound], loops: int = 0) -> None:
-    """Play a sound if it is available."""
     if sound:
         sound.play(loops=loops)
 
 
 def play_type_sound() -> None:
-    """Play the typing sound if the typing channel is free."""
     if snd_main and not type_channel.get_busy():
         type_channel.play(snd_main)
 
@@ -100,7 +83,6 @@ def draw_shadow_text(
     shadow_color: tuple[int, int, int],
     pos: tuple[int, int],
 ) -> None:
-    """Draw text with a small shadow offset."""
     x_pos, y_pos = pos
     shadow = font.render(text, True, shadow_color)
     main = font.render(text, True, color)
@@ -109,18 +91,15 @@ def draw_shadow_text(
 
 
 def lerp(a_val: float, b_val: float, factor: float) -> float:
-    """Linearly interpolate between two values."""
     return a_val + (b_val - a_val) * factor
 
 
 def ease_out_cubic(factor: float) -> float:
-    """Apply an ease-out cubic interpolation curve."""
     factor = max(0.0, min(1.0, factor))
     return 1 - pow(1 - factor, 3)
 
 
 def draw_arrow(surface: pygame.Surface, x_pos: int, y_pos: int) -> None:
-    """Draw the selection arrow."""
     points = [(x_pos, y_pos), (x_pos + 14, y_pos + 8), (x_pos, y_pos + 16)]
     pygame.draw.polygon(surface, WHITE_DIRTY, points)
     pygame.draw.polygon(surface, SHADOW, points, 1)
@@ -131,7 +110,6 @@ def draw_scanlines(
     alpha: int = 18,
     step: int = 2,
 ) -> None:
-    """Draw CRT-like scanlines over a surface."""
     overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
     width, height = surface.get_size()
     for y_pos in range(0, height, step):
@@ -140,13 +118,10 @@ def draw_scanlines(
 
 
 def build_scene_base() -> pygame.Surface:
-    """Build the original scene background used behind the terminal."""
     base = bg.copy()
-
     overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 24))
     base.blit(overlay, (0, 0))
-
     return base
 
 
@@ -154,7 +129,6 @@ def make_terminal_background(
     scene_base: pygame.Surface,
     inner_rect: pygame.Rect,
 ) -> pygame.Surface:
-    """Use the real background slice behind the terminal."""
     slice_surface = scene_base.subsurface(inner_rect).copy().convert_alpha()
 
     darken = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
@@ -180,7 +154,6 @@ def draw_window(
     scene_base: pygame.Surface,
     title: str = "PROGRAM(011)",
 ) -> pygame.Rect:
-    """Draw the outer window and return the inner content rectangle."""
     x_pos, y_pos, width, height = rect
 
     pygame.draw.rect(surface, FRAME_MID, rect)
@@ -283,16 +256,13 @@ def draw_window(
     return inner
 
 
-# =========================================================
-# TERMINAL CONTENT
-# =========================================================
 INFO_LINES = [
     ("DOOR LOCK SERVICE", WHITE_DIRTY),
     ("--------------------------------", WHITE_DIRTY),
     ("Hall side doors: ", WHITE_DIRTY, "LOCKED", GREEN_TEXT),
     ("", WHITE_DIRTY),
     ("The doors can be unlocked", WHITE_DIRTY),
-    ("by a ", WHITE_DIRTY, "CARD KEY.", GREEN_TEXT),
+    ("by a ", WHITE_DIRTY, "CARD KEY", GREEN_TEXT, ".", WHITE_DIRTY),
     ("-", WHITE_DIRTY),
 ]
 
@@ -310,14 +280,8 @@ QUESTION_1 = "Will you use the"
 QUESTION_2 = "Blue Card Key?"
 
 
-# =========================================================
-# APP
-# =========================================================
 class App:
-    """Main application controller."""
-
     def __init__(self) -> None:
-        """Initialize the application state."""
         self.running = True
         self.state = "idle_bg"
         self.state_timer = 0.0
@@ -352,7 +316,6 @@ class App:
         self.replace_start_index = 4
 
     def current_window_rect(self) -> pygame.Rect:
-        """Return the current animated window rectangle."""
         if self.state != "grow":
             return self.target_rect.copy()
 
@@ -367,14 +330,12 @@ class App:
         return pygame.Rect(x_pos, y_pos, width, height)
 
     def reset_typing(self) -> None:
-        """Reset main typing animation state."""
         self.visible_lines = [""]
         self.line_index = 0
         self.char_index = 0
         self.typing_accum = 0.0
 
     def set_state(self, new_state: str) -> None:
-        """Set the current app state and initialize related values."""
         self.state = new_state
         self.state_timer = 0.0
 
@@ -398,23 +359,18 @@ class App:
             play_sound(snd_accept)
 
     def update_subtitle(self, dt: float) -> None:
-        """Advance subtitle typing animation."""
         if self.subtitle_index >= len(self.subtitle):
             return
 
         self.subtitle_accum += dt
         speed = 0.028
 
-        while (
-            self.subtitle_accum >= speed
-            and self.subtitle_index < len(self.subtitle)
-        ):
+        while self.subtitle_accum >= speed and self.subtitle_index < len(self.subtitle):
             self.subtitle_accum -= speed
             self.subtitle_visible += self.subtitle[self.subtitle_index]
             self.subtitle_index += 1
 
     def update_typing(self, dt: float) -> None:
-        """Advance terminal text typing animation."""
         if self.line_index >= len(self.base_lines):
             return
 
@@ -433,7 +389,7 @@ class App:
                 if char != " ":
                     play_type_sound()
             else:
-                if len(line) == 4:
+                if len(line) in (4, 6):
                     self.visible_lines[-1] = line
                     play_type_sound()
                 else:
@@ -446,7 +402,6 @@ class App:
                     self.visible_lines.append("")
 
     def update_question_typing(self, dt: float) -> None:
-        """Advance the question typing animation."""
         self.question_accum += dt
         while self.question_accum >= self.question_speed:
             self.question_accum -= self.question_speed
@@ -464,7 +419,6 @@ class App:
                     play_type_sound()
 
     def build_lines_for_current_state(self):
-        """Build terminal lines according to the current state."""
         lines = self.base_lines[:]
 
         if self.state in ("typing", "question"):
@@ -481,7 +435,6 @@ class App:
         return lines
 
     def update(self, dt: float) -> None:
-        """Update timers, animations, and state transitions."""
         self.state_timer += dt
         self.update_subtitle(dt)
 
@@ -511,7 +464,6 @@ class App:
                 self.set_state("done")
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        """Handle window and keyboard events."""
         if event.type == pygame.QUIT:
             self.running = False
             return
@@ -525,7 +477,7 @@ class App:
                 if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     self.visible_lines = []
                     for line in self.base_lines:
-                        if len(line) == 4:
+                        if len(line) in (4, 6):
                             self.visible_lines.append(line)
                         else:
                             self.visible_lines.append((line[0], line[1]))
@@ -556,7 +508,6 @@ class App:
                     self.running = False
 
     def draw_subtitle(self) -> None:
-        """Draw the animated subtitle when appropriate."""
         if self.state in ("question", "checking", "done"):
             return
 
@@ -570,7 +521,6 @@ class App:
         )
 
     def draw_lines(self, inner_rect: pygame.Rect) -> None:
-        """Draw terminal lines inside the content area."""
         if self.state in ("typing", "question"):
             items = self.visible_lines
         else:
@@ -631,10 +581,37 @@ class App:
                             GREEN_DARK,
                             (x_pos + left_width, y_pos),
                         )
+                    elif len(item) == 6:
+                        left_text, left_color, mid_text, mid_color, right_text, right_color = item
+                        draw_shadow_text(
+                            screen,
+                            font_term,
+                            left_text,
+                            left_color,
+                            SHADOW,
+                            (x_pos, y_pos),
+                        )
+                        offset = font_term.size(left_text)[0]
+                        draw_shadow_text(
+                            screen,
+                            font_term,
+                            mid_text,
+                            mid_color,
+                            GREEN_DARK,
+                            (x_pos + offset, y_pos),
+                        )
+                        offset += font_term.size(mid_text)[0]
+                        draw_shadow_text(
+                            screen,
+                            font_term,
+                            right_text,
+                            right_color,
+                            SHADOW,
+                            (x_pos + offset, y_pos),
+                        )
             y_pos += line_height
 
     def draw_question(self) -> None:
-        """Draw the final yes/no question and selector."""
         question_1 = QUESTION_1[:self.question_char_index_1]
         question_2 = QUESTION_2[:self.question_char_index_2]
 
@@ -678,7 +655,6 @@ class App:
             draw_arrow(screen, 870, SCREEN_H - 66)
 
     def draw_bottom_status(self) -> None:
-        """Draw lower status text for checking and done states."""
         if self.state == "checking":
             draw_shadow_text(
                 screen,
@@ -708,7 +684,6 @@ class App:
             )
 
     def render(self) -> None:
-        """Render the current frame."""
         scene_base = build_scene_base()
         screen.blit(scene_base, (0, 0))
 
@@ -734,7 +709,6 @@ class App:
         pygame.display.flip()
 
     def run(self) -> None:
-        """Run the main application loop."""
         while self.running:
             dt = clock.tick(FPS) / 1000.0
 
