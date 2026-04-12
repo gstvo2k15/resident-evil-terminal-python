@@ -41,8 +41,8 @@ BLACK = (0, 0, 0)
 
 font_title = pygame.font.SysFont("couriernew", 28, bold=True)
 font_term = pygame.font.SysFont("couriernew", 30, bold=True)
-font_key = pygame.font.SysFont("arial", 26, bold=True)
-font_key_small = pygame.font.SysFont("arial", 18, bold=True)
+font_key = pygame.font.SysFont("arial", 24, bold=True)
+font_key_small = pygame.font.SysFont("arial", 16, bold=True)
 
 typing_channel = pygame.mixer.Channel(0)
 ui_channel = pygame.mixer.Channel(1)
@@ -218,7 +218,7 @@ def draw_window(surface, rect, title="PROGRAM(1:1)", scene_base=None, plain_fill
 
 class KeyboardWindow:
     def __init__(self):
-        self.rect = pygame.Rect(225, 555, 1088, 282)
+        self.rect = pygame.Rect(185, 500, 910, 190)
         self.grid = [
             ["ESC", "A", "B", "C", "D", "E", "F", "G", "H", "BACK"],
             ["I", "J", "K", "L", "M", "N", "O", "P", "Q", "ENTER"],
@@ -249,11 +249,11 @@ class KeyboardWindow:
     def draw(self, surface):
         inner = draw_window(surface, self.rect, "KEYBOARD(1:1)", plain_fill=True)
 
-        start_x = inner.x + 6
-        start_y = inner.y + 8
-        cell_w = 102
-        cell_h = 78
-        gap = 6
+        start_x = inner.x + 4
+        start_y = inner.y + 4
+        gap = 4
+        cell_w = (inner.w - gap * 9) // 10
+        cell_h = (inner.h - gap * 2) // 3
 
         for row_idx in range(3):
             for col_idx in range(10):
@@ -285,15 +285,15 @@ class KeyboardWindow:
                     lines = ["BACK", "SPACE"]
                     for idx, txt in enumerate(lines):
                         txt_surface = font_key_small.render(txt, True, KEY_TEXT)
-                        txt_rect = txt_surface.get_rect(center=(rect.centerx, rect.y + 24 + idx * 22))
+                        txt_rect = txt_surface.get_rect(center=(rect.centerx, rect.y + rect.h * 0.35 + idx * 18))
                         surface.blit(txt_surface, txt_rect)
                 elif label == "ESC":
                     txt_surface = font_key.render(label, True, KEY_TEXT)
                     txt_rect = txt_surface.get_rect(center=rect.center)
                     surface.blit(txt_surface, txt_rect)
                 elif label == "ENTER":
-                    pygame.draw.line(surface, KEY_TEXT, (rect.centerx + 18, rect.bottom - 24), (rect.centerx - 6, rect.bottom - 24), 5)
-                    pygame.draw.line(surface, KEY_TEXT, (rect.centerx - 6, rect.bottom - 24), (rect.centerx + 18, rect.bottom - 50), 5)
+                    pygame.draw.line(surface, KEY_TEXT, (rect.centerx + 14, rect.bottom - 20), (rect.centerx - 6, rect.bottom - 20), 4)
+                    pygame.draw.line(surface, KEY_TEXT, (rect.centerx - 6, rect.bottom - 20), (rect.centerx + 14, rect.bottom - 40), 4)
                 else:
                     txt_surface = font_key.render(label, True, KEY_TEXT)
                     txt_rect = txt_surface.get_rect(center=rect.center)
@@ -633,7 +633,6 @@ class App:
         scene_base = build_scene_base()
         screen.blit(scene_base, (0, 0))
 
-        rect = None
         if self.state != "idle_bg":
             rect = self.current_window_rect()
             inner_rect = draw_window(screen, rect, "PROGRAM(1:1)", scene_base=scene_base)
