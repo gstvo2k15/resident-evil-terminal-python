@@ -2,10 +2,9 @@
 
 A fun simulation inspired by *Resident evil 2 & 3* main PC access for unlock RPD doors.
 
-![alt text](re2_example.png)
+![alt text](screen_re2.png)
 
-![alt text](re3_example.png)
-
+![alt text](screen_re3.png)
 ---
 
 ## 🚀 Installation & Usage
