@@ -10,13 +10,13 @@ SCREEN_W = 1280
 SCREEN_H = 720
 FPS = 60
 
-BG_IMAGE = BASE_DIR / "RE3_newest_saffspringHd_Fixed_BASE.png"
+BG_IMAGE = BASE_DIR / "safsprinHd_Fixed_BASE.png"
 
-SND_OPEN = BASE_DIR / "re3_openning_terminal_letters_pc.mp3"
-SND_LETTERS = BASE_DIR / "re3_letters_pc.mp3"
-SND_CHOOSE = BASE_DIR / "re3_chosing_single_letters_pc.mp3"
-SND_ENTER = BASE_DIR / "re3_enter_passwd_pc.mp3"
-SND_FINISH = BASE_DIR / "re3_finish_passwd_pc.mp3"
+SND_OPEN = BASE_DIR / "safsprin_openning_terminal_letters_pc.mp3"
+SND_LETTERS = BASE_DIR / "safsprin_letters_pc.mp3"
+SND_CHOOSE = BASE_DIR / "safsprin_chosing_single_letters_pc.mp3"
+SND_ENTER = BASE_DIR / "safsprin_enter_passwd_pc.mp3"
+SND_FINISH = BASE_DIR / "safsprin_finish_passwd_pc.mp3"
 
 PASSWORD_OPTIONS = ["SAFSPRIN", "ADRAVIL", "AQUACURE"]
 
@@ -136,7 +136,7 @@ def build_scene_base():
     return base
 
 
-def make_terminal_background(scene_base, inner_rect):
+def make_scene_window_background(scene_base, inner_rect):
     slice_surface = scene_base.subsurface(inner_rect).copy().convert_alpha()
     darken = pygame.Surface((inner_rect.w, inner_rect.h), pygame.SRCALPHA)
     darken.fill((0, 0, 0, 118))
@@ -149,7 +149,22 @@ def make_terminal_background(scene_base, inner_rect):
     return slice_surface
 
 
-def draw_window(surface, rect, scene_base, title="PROGRAM(1:1)"):
+def make_plain_window_background(size):
+    width, height = size
+    surface = pygame.Surface((width, height))
+    surface.fill((120, 120, 120))
+
+    overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 30))
+    surface.blit(overlay, (0, 0))
+
+    for y_pos in range(0, height, 3):
+        pygame.draw.line(surface, (135, 135, 135), (0, y_pos), (width, y_pos))
+
+    return surface
+
+
+def draw_window(surface, rect, title="PROGRAM(1:1)", scene_base=None, plain_fill=False):
     x_pos, y_pos, width, height = rect
 
     pygame.draw.rect(surface, FRAME_MID, rect)
@@ -181,7 +196,11 @@ def draw_window(surface, rect, scene_base, title="PROGRAM(1:1)"):
     pad = 6
     inner = pygame.Rect(x_pos + pad, y_pos + bar_height + pad, width - pad * 2, height - bar_height - pad * 2 - 10)
 
-    inner_surface = make_terminal_background(scene_base, inner)
+    if plain_fill:
+        inner_surface = make_plain_window_background((inner.w, inner.h))
+    else:
+        inner_surface = make_scene_window_background(scene_base, inner)
+
     surface.blit(inner_surface, inner.topleft)
     pygame.draw.rect(surface, BLACK, inner, 2)
 
@@ -213,19 +232,13 @@ class KeyboardWindow:
         old_col = self.col
 
         if dy != 0:
-            new_row = max(0, min(2, self.row + dy))
-            if self.col == 9:
-                self.row = new_row
-            else:
-                self.row = new_row
-                if self.row == 2 and self.col > 8:
-                    self.col = 8
+            self.row = max(0, min(2, self.row + dy))
 
         if dx != 0:
-            if self.row == 0:
-                self.col = max(0, min(9, self.col + dx))
-            elif self.row in (1, 2):
-                self.col = max(0, min(9, self.col + dx))
+            self.col = max(0, min(9, self.col + dx))
+
+        if self.row == 2 and self.col == 9:
+            self.col = 8
 
         if old_row != self.row or old_col != self.col:
             play_choose()
@@ -234,7 +247,7 @@ class KeyboardWindow:
         return self.grid[self.row][self.col]
 
     def draw(self, surface):
-        inner = draw_window(surface, self.rect, surface.copy(), "KEYBOARD(1:1)")
+        inner = draw_window(surface, self.rect, "KEYBOARD(1:1)", plain_fill=True)
 
         start_x = inner.x + 6
         start_y = inner.y + 8
@@ -244,10 +257,10 @@ class KeyboardWindow:
 
         for row_idx in range(3):
             for col_idx in range(10):
-                label = self.grid[row_idx][col_idx]
-
                 if row_idx == 2 and col_idx == 9:
                     continue
+
+                label = self.grid[row_idx][col_idx]
 
                 x_pos = start_x + col_idx * (cell_w + gap)
                 y_pos = start_y + row_idx * (cell_h + gap)
@@ -363,8 +376,8 @@ class App:
     def current_speed(self):
         if self.state == "typing_opening":
             return self.opening_speed
-        if self.state in ("typing_main", "typing_success"):
-            return self.success_speed if self.state == "typing_success" else self.normal_speed
+        if self.state == "typing_success":
+            return self.success_speed
         return self.normal_speed
 
     def begin_block(self, block_lines):
@@ -494,7 +507,7 @@ class App:
             return
 
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE and self.state not in ("password_entry",):
+            if event.key == pygame.K_ESCAPE and self.state != "password_entry":
                 self.running = False
                 return
 
@@ -588,7 +601,14 @@ class App:
                     left_txt, left_col, right_txt, right_col = item
                     draw_shadow_text(screen, font_term, left_txt, left_col, SHADOW, (x_pos, y_pos))
                     offset = font_term.size(left_txt)[0]
-                    draw_shadow_text(screen, font_term, right_txt, right_col, RED_DARK if right_col == RED_TEXT else SHADOW, (x_pos + offset, y_pos))
+                    draw_shadow_text(
+                        screen,
+                        font_term,
+                        right_txt,
+                        right_col,
+                        RED_DARK if right_col == RED_TEXT else SHADOW,
+                        (x_pos + offset, y_pos),
+                    )
                 elif len(item) == 6:
                     left_txt, left_col, mid_txt, mid_col, right_txt, right_col = item
                     draw_shadow_text(screen, font_term, left_txt, left_col, SHADOW, (x_pos, y_pos))
@@ -613,10 +633,10 @@ class App:
         scene_base = build_scene_base()
         screen.blit(scene_base, (0, 0))
 
-        rect = self.current_window_rect() if self.state != "idle_bg" else None
-
-        if rect:
-            inner_rect = draw_window(screen, rect, scene_base, "PROGRAM(1:1)")
+        rect = None
+        if self.state != "idle_bg":
+            rect = self.current_window_rect()
+            inner_rect = draw_window(screen, rect, "PROGRAM(1:1)", scene_base=scene_base)
             if rect.w > 280 and rect.h > 150 and self.state != "grow":
                 self.draw_program_lines(inner_rect)
 
